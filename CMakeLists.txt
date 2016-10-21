@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
 	dr_msgs
 	dr_ros
 	dr_thread
+	dr_util
 	image_transport
 	pcl_conversions
 	pcl_ros
@@ -24,7 +25,7 @@ dr_include_directories(
 	${catkin_INCLUDE_DIRS}
 )
 
-add_executable(ensenso      src/ensenso.cpp src/timestamp.cpp)
+add_executable(ensenso      src/ensenso.cpp)
 add_executable(fake_ensenso src/fake_ensenso.cpp)
 add_executable(calibrate    src/calibrate.cpp)
 target_link_libraries(ensenso      ${catkin_LIBRARIES})
