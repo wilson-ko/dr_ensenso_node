@@ -121,25 +121,27 @@ protected:
 			}
 		}
 
-		// load monocular parameters file
-		std::string monocular_param_file = getParam<std::string>("monocular_param_file", "");
-		if (monocular_param_file != "") {
-			try {
-				if (!ensenso_camera->loadMonocularParameters(monocular_param_file)) {
-					DR_ERROR("Failed to set monocular camera params. File path: " << monocular_param_file);
+		if (ensenso_camera->hasMonocular()) {
+			// load monocular parameters file
+			std::string monocular_param_file = getParam<std::string>("monocular_param_file", "");
+			if (monocular_param_file != "") {
+				try {
+					if (!ensenso_camera->loadMonocularParameters(monocular_param_file)) {
+						DR_ERROR("Failed to set monocular camera params. File path: " << monocular_param_file);
+					}
+				} catch (dr::NxError const & e) {
+					DR_ERROR("Failed to set monocular camera params. " << e.what());
 				}
-			} catch (dr::NxError const & e) {
-				DR_ERROR("Failed to set monocular camera params. " << e.what());
 			}
-		}
 
-		// load monocular parameter set file
-		std::string monocular_ueye_param_file = getParam<std::string>("monocular_ueye_param_file", "");
-		if (monocular_ueye_param_file != "") {
-			try {
-				ensenso_camera->loadMonocularUeyeParameters(monocular_ueye_param_file);
-			} catch (dr::NxError const & e) {
-				DR_ERROR("Failed to set monocular param set file. " << e.what());
+			// load monocular parameter set file
+			std::string monocular_ueye_param_file = getParam<std::string>("monocular_ueye_param_file", "");
+			if (monocular_ueye_param_file != "") {
+				try {
+					ensenso_camera->loadMonocularUeyeParameters(monocular_ueye_param_file);
+				} catch (dr::NxError const & e) {
+					DR_ERROR("Failed to set monocular param set file. " << e.what());
+				}
 			}
 		}
 
