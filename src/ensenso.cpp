@@ -34,26 +34,187 @@
 
 namespace dr {
 
-// this is needed because std::make_unique only exists from c++14
-template<typename T, typename... Args>
-std::unique_ptr<T> make_unique(Args&&... args) {
-	return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+ImageType parseImageType(std::string const & name) {
+	if (name == "ImageType::stereo_raw_left"       ) return ImageType::stereo_raw_left;
+	if (name == "ImageType::stereo_raw_right"      ) return ImageType::stereo_raw_right;
+	if (name == "ImageType::stereo_rectified_left" ) return ImageType::stereo_rectified_left;
+	if (name == "ImageType::stereo_rectified_right") return ImageType::stereo_rectified_right;
+	if (name == "ImageType::disparity"             ) return ImageType::disparity;
+	if (name == "ImageType::monocular_raw"         ) return ImageType::monocular_raw;
+	if (name == "ImageType::monocular_rectified"   ) return ImageType::monocular_rectified;
+	throw std::runtime_error("Unknown image type: " + name);
+}
+
+std::string encoding(ImageType type) {
+	switch (type) {
+		case ImageType::stereo_raw_left:
+		case ImageType::stereo_raw_right:
+		case ImageType::stereo_rectified_left:
+		case ImageType::stereo_rectified_right:
+			return sensor_msgs::image_encodings::MONO8;
+		case ImageType::disparity:
+			return sensor_msgs::image_encodings::MONO16;
+		case ImageType::monocular_raw:
+		case ImageType::monocular_rectified:
+		case ImageType::monocular_overlay:
+			return sensor_msgs::image_encodings::BGR8;
+	}
+
+	throw std::runtime_error("Unknown image type: " + std::to_string(int(type)));
+}
+
+bool isMonocular(ImageType type) {
+	switch (type) {
+		case ImageType::stereo_raw_left:
+		case ImageType::stereo_raw_right:
+		case ImageType::stereo_rectified_left:
+		case ImageType::stereo_rectified_right:
+		case ImageType::disparity:
+			return false;
+		case ImageType::monocular_raw:
+		case ImageType::monocular_rectified:
+		case ImageType::monocular_overlay:
+			return true;
+	}
+
+	throw std::runtime_error("Unknown image type: " + std::to_string(int(type)));
+}
+
+bool needsRectification(ImageType type) {
+	switch (type) {
+		case ImageType::stereo_rectified_left:
+		case ImageType::stereo_rectified_right:
+		case ImageType::disparity:
+		case ImageType::monocular_rectified:
+		case ImageType::monocular_overlay:
+			return true;
+		case ImageType::monocular_raw:
+		case ImageType::stereo_raw_left:
+		case ImageType::stereo_raw_right:
+			return false;
+	}
+	throw std::runtime_error("Unknown image type: " + std::to_string(int(type)));
 }
 
 class EnsensoNode: public Node {
+	/// The wrapper for the Ensenso stereo camera.
+	std::unique_ptr<dr::Ensenso> ensenso_camera;
+
+	/// Serial id of the Ensenso camera.
+	std::string serial;
+
+	/// The type of the color image.
+	ImageType image_type;
+
+	/// If true, registers the point clouds.
+	bool register_pointcloud;
+
+	/// If true, retrieves the monocular camera and Ensenso simultaneously. A hardware trigger is advised to remove the projector from the uEye image.
+	bool synced_retrieve;
+
+	/// The frame in which the image and point clouds are send.
+	std::string camera_frame;
+
+	struct {
+		/// Frame to calibrate the camera to when camera_moving is true (gripper frame).
+		std::string moving_frame;
+
+		/// Frame to calibrate the camera to when camera_moving is false (robot origin or world frame).
+		std::string fixed_frame;
+
+		/// Used in calibration. Determines if the camera is moving (eye in hand) or static.
+		bool camera_moving;
+
+		// Guess of the camera pose relative to gripper (for moving camera) or relative to robot origin (for static camera).
+		boost::optional<Eigen::Isometry3d> camera_guess;
+
+		// Guess of the calibration pattern pose relative to gripper (for static camera) or relative to robot origin (for moving camera).
+		boost::optional<Eigen::Isometry3d> pattern_guess;
+
+		/// List of robot poses corresponding to the list of recorded calibration patterns.
+		std::vector<Eigen::Isometry3d> robot_poses;
+	} auto_calibration;
+
+	/// If true, publishes recorded data.
+	bool publish_data;
+
+	/// If true, save recorded data to disk.
+	bool save_data;
+
+	/// Location where the images and point clouds are stored.
+	std::string camera_data_path;
+
+	/// Thread pool for parallel work.
+	dr::ThreadPool thread_pool;
+
+	struct {
+		/// Service server for supplying point clouds and images.
+		ros::ServiceServer camera_data;
+
+		/// Service server for dumping image and cloud to disk.
+		ros::ServiceServer save_data;
+
+		/// Service server for retrieving the pose of the pattern.
+		ros::ServiceServer get_pattern_pose;
+
+		/// Service server for setting the camera pose setting of the Ensenso.
+		ros::ServiceServer set_workspace_calibration;
+
+		/// Service server for clearing the camera pose setting of the Ensenso.
+		ros::ServiceServer clear_workspace_calibration;
+
+		/// Service server combining 'get_pattern_pose', 'set_workspace', and stores it to the ensenso.
+		ros::ServiceServer calibrate_workspace;
+
+		/// Service server for storing the calibration.
+		ros::ServiceServer store_workspace_calibration;
+
+		/// Service server for initializing the calibration sequence.
+		ros::ServiceServer initialize_calibration;
+
+		/// Service server for recording one calibration sample.
+		ros::ServiceServer record_calibration;
+
+		/// Service server for finalizing the calibration.
+		ros::ServiceServer finalize_calibration;
+	} servers;
+
+	struct Publishers {
+		/// Publisher for the calibration result.
+		ros::Publisher calibration;
+
+		/// Publisher for publishing raw point clouds.
+		ros::Publisher cloud;
+
+		/// Publisher for publishing images.
+		image_transport::Publisher image;
+
+		/// Publisher for publishing live images.
+		image_transport::Publisher live;
+	} publishers;
+
+	/// Object for handling transportation of images.
+	image_transport::ImageTransport image_transport;
+
+	/// Timer to trigger calibration publishing.
+	ros::Timer publish_calibration_timer;
+
+	/// Timer to trigger image publishing.
+	ros::Timer publish_images_timer;
+
 public:
-	EnsensoNode() : image_transport(*this), thread_pool(1) {
+	EnsensoNode() : thread_pool(1), image_transport(*this) {
 		configure();
 	}
 
 private:
 	/// Resets calibration state from this node.
 	void resetCalibration() {
-		moving_frame  = "";
-		fixed_frame   = "";
-		camera_guess  = boost::none;
-		pattern_guess = boost::none;
-		robot_poses.clear();
+		auto_calibration.moving_frame  = "";
+		auto_calibration.fixed_frame   = "";
+		auto_calibration.camera_guess  = boost::none;
+		auto_calibration.pattern_guess = boost::none;
+		auto_calibration.robot_poses.clear();
 	}
 
 protected:
@@ -61,19 +222,19 @@ protected:
 	using PointCloud = pcl::PointCloud<Point>;
 
 	struct Data {
-		PointCloud::Ptr cloud;
+		PointCloud cloud;
 		cv::Mat image;
 	};
 
 	void configure() {
 		// load ROS parameters
-		param<std::string>("camera_frame", camera_frame, "camera_frame");
-		param<std::string>("camera_data_path", camera_data_path, "camera_data");
-		param<bool>("publish_cloud", publish_cloud, true);
-		param<bool>("dump_images", dump_images, true);
-		param<bool>("registered", registered, true);
-		param<bool>("connect_monocular", connect_monocular, true);
-		param<bool>("synced_retrieve", synced_retrieve, false);
+		camera_frame        = getParam<std::string>("camera_frame", "camera_frame");
+		camera_data_path    = getParam<std::string>("camera_data_path", "camera_data");
+		image_type          = parseImageType(getParam<std::string>("image_type"));
+		register_pointcloud = getParam<bool>("register_pointcloud");
+		synced_retrieve     = getParam<bool>("synced_retrieve", true);
+		publish_data        = getParam<bool>("publish_data",    true);
+		save_data           = getParam<bool>("save_data",       true);
 
 		// get Ensenso serial
 		serial = getParam<std::string>("serial", "");
@@ -85,7 +246,7 @@ protected:
 
 		try {
 			// create the camera
-			ensenso_camera = dr::make_unique<dr::Ensenso>(serial, connect_monocular);
+			ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular());
 		} catch (dr::NxError const & e) {
 			throw std::runtime_error("Failed initializing camera. " + std::string(e.what()));
 		} catch (std::runtime_error const & e) {
@@ -94,7 +255,7 @@ protected:
 
 		// activate service servers
 		servers.camera_data                 = advertiseService("get_data"                   , &EnsensoNode::onGetData                  , this);
-		servers.dump_data                   = advertiseService("dump_data"                  , &EnsensoNode::onDumpData                 , this);
+		servers.save_data                   = advertiseService("save_data"                  , &EnsensoNode::onSaveData                 , this);
 		servers.get_pattern_pose            = advertiseService("detect_calibration_pattern" , &EnsensoNode::onDetectCalibrationPattern , this);
 		servers.initialize_calibration      = advertiseService("initialize_calibration"     , &EnsensoNode::onInitializeCalibration    , this);
 		servers.record_calibration          = advertiseService("record_calibration"         , &EnsensoNode::onRecordCalibration        , this);
@@ -108,6 +269,7 @@ protected:
 		publishers.calibration = advertise<geometry_msgs::PoseStamped>("calibration", 1, true);
 		publishers.cloud       = advertise<PointCloud>("cloud", 1, true);
 		publishers.image       = image_transport.advertise("image", 1, true);
+		publishers.live        = image_transport.advertise("live", 1, true);
 
 		// load ensenso parameters file
 		std::string ensenso_param_file = getParam<std::string>("ensenso_param_file", "");
@@ -160,82 +322,36 @@ protected:
 			publish_images_timer = createTimer(ros::Rate(publish_images_rate), &EnsensoNode::publishImage, this);
 		}
 
-		// check if there is an monocular camera connected
-		has_monocular = ensenso_camera->hasMonocular();
-
 		DR_SUCCESS("Ensenso opened successfully.");
+	}
+
+	bool needMonocular() {
+		return register_pointcloud || isMonocular(image_type);
 	}
 
 	void publishImage(ros::TimerEvent const &) {
 		if (publishers.image.getNumSubscribers() == 0) return;
 
-		// capture only image
-		capture(false, true);
+		captureData(false);
 
-		// create a header
+		// Create a header.
 		std_msgs::Header header;
 		header.frame_id = camera_frame;
 		header.stamp    = ros::Time::now();
 
-		// prepare message
+		// Prepare message.
 		cv_bridge::CvImage cv_image(
 			header,
-			has_monocular ? sensor_msgs::image_encodings::BGR8 : sensor_msgs::image_encodings::MONO8,
-			getImage(!has_monocular)
+			encoding(image_type),
+			getImage()
 		);
 
-		// publish the image
-		publishers.image.publish(cv_image.toImageMsg());
+		// Publish the image to the live stream.
+		publishers.live.publish(cv_image.toImageMsg());
 	}
 
-	PointCloud::Ptr getPointCloud() {
-		PointCloud::Ptr cloud(new PointCloud);
-		try {
-			if (registered) {
-				ensenso_camera->loadRegisteredPointCloud(*cloud, cv::Rect(), false);
-			} else {
-				ensenso_camera->loadPointCloud(*cloud, cv::Rect(), false);
-			}
-		} catch (dr::NxError const & e) {
-			DR_ERROR("Failed to retrieve PointCloud. " << e.what());
-			return nullptr;
-		}
-		cloud->header.frame_id = camera_frame;
 
-		return cloud;
-	}
-
-	cv::Mat getImage(bool capture) {
-		// get a grayscale image? then enable frontlight
-		int flex_view;
-		if (!has_monocular && capture) {
-			flex_view = ensenso_camera->flexView();
-			ensenso_camera->setFlexView(0);
-			ensenso_camera->setProjector(false);
-			ensenso_camera->setFrontLight(true);
-		}
-
-		cv::Mat image;
-		try {
-			ensenso_camera->loadIntensity(image, capture);
-		} catch (dr::NxError const & e) {
-			DR_ERROR("Failed to retrieve image. " << e.what());
-			return cv::Mat();
-		}
-
-		// restore settings
-		if (!has_monocular && capture) {
-			ensenso_camera->setFrontLight(false);
-			ensenso_camera->setProjector(true);
-			if (flex_view > 0) {
-				ensenso_camera->setFlexView(flex_view);
-			}
-		}
-
-		return image;
-	}
-
-	void dumpData(PointCloud::ConstPtr point_cloud, cv::Mat const & image) {
+	void saveData(PointCloud const & point_cloud, cv::Mat const & image) {
 		// create path if it does not exist
 		boost::filesystem::path path(camera_data_path);
 		if (!boost::filesystem::is_directory(path)) {
@@ -244,63 +360,57 @@ protected:
 
 		std::string time_string = getTimeString();
 
-		pcl::io::savePCDFileBinary(camera_data_path + "/" + time_string + ".pcd", *point_cloud);
+		pcl::io::savePCDFileBinary(camera_data_path + "/" + time_string + ".pcd", point_cloud);
 		cv::imwrite(camera_data_path + "/" + time_string + ".png", image);
 	}
 
-	bool capture(bool stereo, bool monocular) {
-		// retrieve image data
-		try {
-			if (!ensenso_camera->retrieve(true, 3000, stereo, has_monocular && monocular)) {
-				DR_ERROR("Failed to retrieve image data.");
-				return false;
-			}
-		} catch (dr::NxError const & e) {
-			DR_ERROR("Failed to retrieve image data. " << e.what());
-			return false;
+	void captureData(bool point_cloud = true) {
+		if (synced_retrieve) {
+			ensenso_camera->retrieve(true, 1500, true, needMonocular());
+		} else {
+			if (needMonocular()) ensenso_camera->retrieve(true, 1500, false, true);
+			ensenso_camera->retrieve(true, 1500, true, false);
 		}
+		if (point_cloud || needsRectification(image_type))     ensenso_camera->rectifyImages();
+		if (point_cloud || image_type == ImageType::disparity) ensenso_camera->computeDisparity();
+		if (point_cloud)                                       ensenso_camera->computePointCloud();
+		if (point_cloud && register_pointcloud)                ensenso_camera->registerPointCloud();
+	}
 
-		return true;
+	cv::Mat getImage() {
+		return ensenso_camera->loadImage(image_type);
+	}
+
+	pcl::PointCloud<pcl::PointXYZ> getPointCloud() {
+		if (register_pointcloud) {
+			return ensenso_camera->loadRegisteredPointCloud();
+		} else {
+			return ensenso_camera->loadPointCloud();
+		}
 	}
 
 	boost::optional<Data> getData() {
-		cv::Mat image;
-
-		// when using an monocular, capture both simultaneously
-		if (has_monocular) {
-			if (!capture(synced_retrieve, true)) return boost::none;
-
-			// capture stereo image after monocular image if we don't synchronize the triggers
-			if (!synced_retrieve && !capture(true, false)) return boost::none;
-			image = getImage(false);
-
-		// when not using an monocular, capture image first
-		} else {
-			image = getImage(true);
-			if (!capture(true, false)) return boost::none;
-		}
-
-		return Data{getPointCloud(), image};
+		captureData();
+		return Data{getPointCloud(), getImage()};
 	}
 
 	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
 		boost::optional<Data> data = getData();
 		if (!data) return false;
-		pcl::toROSMsg(*data->cloud, res.point_cloud);
+		pcl::toROSMsg(data->cloud, res.point_cloud);
 
-		// get the image
+		// Get the image.
 		cv_bridge::CvImage cv_image(
 			res.point_cloud.header,
-			has_monocular ? sensor_msgs::image_encodings::BGR8 : sensor_msgs::image_encodings::MONO8,
+			encoding(image_type),
 			data->image
 		);
 		res.color = *cv_image.toImageMsg();
 
-		// store image and point cloud
-		if (dump_images) {
-			// store point cloud and image in a separate thread
+		// Store image and point cloud.
+		if (save_data) {
 			thread_pool.enqueue(
-				&EnsensoNode::dumpData,
+				&EnsensoNode::saveData,
 				this,
 				data->cloud,
 				data->image
@@ -308,20 +418,21 @@ protected:
 		}
 
 		// publish point cloud if requested
-		if (publish_cloud) {
+		if (publish_data) {
 			publishers.cloud.publish(data->cloud);
+			publishers.image.publish(res.color);
 		}
 
 		return true;
 	}
 
-	bool onDumpData(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
+	bool onSaveData(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
 		boost::optional<Data> data = getData();
 		if (!data) return false;
 
 			// store point cloud and image in a separate thread
 			thread_pool.enqueue(
-				&EnsensoNode::dumpData,
+				&EnsensoNode::saveData,
 				this,
 				data->cloud,
 				data->image
@@ -355,28 +466,28 @@ protected:
 		}
 		resetCalibration();
 
-		camera_moving = req.camera_moving;
-		moving_frame  = req.moving_frame;
-		fixed_frame   = req.fixed_frame;
+		auto_calibration.camera_moving = req.camera_moving;
+		auto_calibration.moving_frame  = req.moving_frame;
+		auto_calibration.fixed_frame   = req.fixed_frame;
 
 		// check for valid camera guess
 		if (req.camera_guess.position.x == 0 && req.camera_guess.position.y == 0 && req.camera_guess.position.z == 0 &&
 			req.camera_guess.orientation.x == 0 && req.camera_guess.orientation.y == 0 && req.camera_guess.orientation.z == 0 && req.camera_guess.orientation.w == 0) {
-			camera_guess = boost::none;
+			auto_calibration.camera_guess = boost::none;
 		} else {
-			camera_guess = dr::toEigen(req.camera_guess);
+			auto_calibration.camera_guess = dr::toEigen(req.camera_guess);
 		}
 
 		// check for valid pattern guess
 		if (req.pattern_guess.position.x == 0 && req.pattern_guess.position.y == 0 && req.pattern_guess.position.z == 0 &&
 			req.pattern_guess.orientation.x == 0 && req.pattern_guess.orientation.y == 0 && req.pattern_guess.orientation.z == 0 && req.pattern_guess.orientation.w == 0) {
-			pattern_guess = boost::none;
+			auto_calibration.pattern_guess = boost::none;
 		} else {
-			pattern_guess = dr::toEigen(req.pattern_guess);
+			auto_calibration.pattern_guess = dr::toEigen(req.pattern_guess);
 		}
 
 		// check for proper initialization
-		if (moving_frame == "" || fixed_frame == "") {
+		if (auto_calibration.moving_frame == "" || auto_calibration.fixed_frame == "") {
 			DR_ERROR("No calibration frame provided.");
 			return false;
 		}
@@ -388,7 +499,7 @@ protected:
 
 	bool onRecordCalibration(dr_msgs::SendPose::Request & req, dr_msgs::SendPose::Response &) {
 		// check for proper initialization
-		if (moving_frame == "" || fixed_frame == "") {
+		if (auto_calibration.moving_frame == "" || auto_calibration.fixed_frame == "") {
 			DR_ERROR("No calibration frame provided.");
 			return false;
 		}
@@ -398,7 +509,7 @@ protected:
 			ensenso_camera->recordCalibrationPattern();
 
 			// add robot pose to list of poses
-			robot_poses.push_back(dr::toEigen(req.data));
+			auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
 		} catch (dr::NxError const & e) {
 			DR_ERROR("Failed to record calibration pattern. " << e.what());
 			return false;
@@ -409,6 +520,13 @@ protected:
 	}
 
 	bool onFinalizeCalibration(dr_ensenso_msgs::FinalizeCalibration::Request &, dr_ensenso_msgs::FinalizeCalibration::Response & res) {
+		auto const & camera_moving = auto_calibration.camera_moving;
+		auto const & moving_frame  = auto_calibration.moving_frame;
+		auto const & fixed_frame   = auto_calibration.fixed_frame;
+		auto const & camera_guess  = auto_calibration.camera_guess;
+		auto const & pattern_guess = auto_calibration.pattern_guess;
+		auto const & robot_poses   = auto_calibration.robot_poses;
+
 		// check for proper initialization
 		if (moving_frame == "" || fixed_frame == "") {
 			DR_ERROR("No calibration frame provided.");
@@ -418,11 +536,17 @@ protected:
 		try {
 			// perform calibration
 			dr::Ensenso::CalibrationResult calibration =
-				ensenso_camera->computeCalibration(robot_poses, camera_moving, camera_guess, pattern_guess, camera_moving ? moving_frame : fixed_frame);
+				ensenso_camera->computeCalibration(
+					robot_poses,
+					camera_moving,
+					camera_guess,
+					pattern_guess,
+					camera_moving ? moving_frame : fixed_frame
+				);
 
 			// copy result
-			res.camera_pose        = dr::toRosPoseStamped(std::get<0>(calibration), camera_moving ? moving_frame : fixed_frame);
-			res.pattern_pose       = dr::toRosPoseStamped(std::get<1>(calibration), camera_moving ? fixed_frame : moving_frame);
+			res.camera_pose        = dr::toRosPoseStamped(std::get<0>(calibration), camera_moving ? moving_frame :  fixed_frame);
+			res.pattern_pose       = dr::toRosPoseStamped(std::get<1>(calibration), camera_moving ?  fixed_frame : moving_frame);
 			res.iterations         = std::get<2>(calibration);
 			res.reprojection_error = std::get<3>(calibration);
 
@@ -504,112 +628,6 @@ protected:
 
 		publishers.calibration.publish(pose);
 	}
-
-	/// The wrapper for the Ensenso stereo camera.
-	std::unique_ptr<dr::Ensenso> ensenso_camera;
-
-	struct {
-		/// Service server for supplying point clouds and images.
-		ros::ServiceServer camera_data;
-
-		/// Service server for dumping image and cloud to disk.
-		ros::ServiceServer dump_data;
-
-		/// Service server for retrieving the pose of the pattern.
-		ros::ServiceServer get_pattern_pose;
-
-		/// Service server for initializing the calibration sequence.
-		ros::ServiceServer initialize_calibration;
-
-		/// Service server for recording one calibration sample.
-		ros::ServiceServer record_calibration;
-
-		/// Service server for finalizing the calibration.
-		ros::ServiceServer finalize_calibration;
-
-		/// Service server for setting the camera pose setting of the Ensenso.
-		ros::ServiceServer set_workspace_calibration;
-
-		/// Service server for clearing the camera pose setting of the Ensenso.
-		ros::ServiceServer clear_workspace_calibration;
-
-		/// Service server combining 'get_pattern_pose', 'set_workspace', and stores it to the ensenso.
-		ros::ServiceServer calibrate_workspace;
-
-		/// Service server for storing the calibration.
-		ros::ServiceServer store_workspace_calibration;
-	} servers;
-
-	/// Object for handling transportation of images.
-	image_transport::ImageTransport image_transport;
-
-	/// Timer to trigger calibration publishing.
-	ros::Timer publish_calibration_timer;
-
-	/// Timer to trigger image publishing.
-	ros::Timer publish_images_timer;
-
-	struct Publishers {
-		/// Publisher for the calibration result.
-		ros::Publisher calibration;
-
-		/// Publisher for publishing raw point clouds.
-		ros::Publisher cloud;
-
-		/// Publisher for publishing images.
-		image_transport::Publisher image;
-	} publishers;
-
-	/// The calibrated pose of the camera.
-	geometry_msgs::PoseStamped camera_pose;
-
-	/// The frame in which the image and point clouds are send.
-	std::string camera_frame;
-
-	/// Frame to calibrate the camera to when camera_moving is true (gripper frame).
-	std::string moving_frame;
-
-	/// Frame to calibrate the camera to when camera_moving is false (robot origin or world frame).
-	std::string fixed_frame;
-
-	/// Serial id of the Ensenso camera.
-	std::string serial;
-
-	/// If true, publishes point cloud data when calling getData.
-	bool publish_cloud;
-
-	/// If true, dump recorded images.
-	bool dump_images;
-
-	/// If true, registers the point clouds.
-	bool registered;
-
-	// Guess of the camera pose relative to gripper (for moving camera) or relative to robot origin (for static camera).
-	boost::optional<Eigen::Isometry3d> camera_guess;
-
-	// Guess of the calibration pattern pose relative to gripper (for static camera) or relative to robot origin (for moving camera).
-	boost::optional<Eigen::Isometry3d> pattern_guess;
-
-	/// Used in calibration. Determines if the camera is moving (eye in hand) or static.
-	bool camera_moving;
-
-	/// List of robot poses corresponding to the list of recorded calibration patterns.
-	std::vector<Eigen::Isometry3d> robot_poses;
-
-	/// Location where the images and point clouds are stored.
-	std::string camera_data_path;
-
-	/// If true, the Ensenso has an monocular camera connected.
-	bool has_monocular;
-
-	/// If true, tries to connect an monocular camera.
-	bool connect_monocular;
-
-	/// If true, retrieves the monocular camera and Ensenso simultaneously. A hardware trigger is advised to remove the projector from the uEye image.
-	bool synced_retrieve;
-
-	/// Thread pool for parallel work.
-	dr::ThreadPool thread_pool;
 };
 
 }
