@@ -231,7 +231,7 @@ protected:
 		camera_frame        = getParam<std::string>("camera_frame", "camera_frame");
 		camera_data_path    = getParam<std::string>("camera_data_path", "camera_data");
 		image_source        = parseImageType(getParam<std::string>("image_source"));
-		register_pointcloud = getParam<bool>("register_pointcloud");
+		register_pointcloud = getParam<bool>("register_point_cloud");
 		synced_retrieve     = getParam<bool>("synced_retrieve", true);
 		publish_data        = getParam<bool>("publish_data",    true);
 		save_data           = getParam<bool>("save_data",       true);
