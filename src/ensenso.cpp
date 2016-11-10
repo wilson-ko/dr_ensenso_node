@@ -35,13 +35,13 @@
 namespace dr {
 
 ImageType parseImageType(std::string const & name) {
-	if (name == "ImageType::stereo_raw_left"       ) return ImageType::stereo_raw_left;
-	if (name == "ImageType::stereo_raw_right"      ) return ImageType::stereo_raw_right;
-	if (name == "ImageType::stereo_rectified_left" ) return ImageType::stereo_rectified_left;
-	if (name == "ImageType::stereo_rectified_right") return ImageType::stereo_rectified_right;
-	if (name == "ImageType::disparity"             ) return ImageType::disparity;
-	if (name == "ImageType::monocular_raw"         ) return ImageType::monocular_raw;
-	if (name == "ImageType::monocular_rectified"   ) return ImageType::monocular_rectified;
+	if (name == "stereo_raw_left"       ) return ImageType::stereo_raw_left;
+	if (name == "stereo_raw_right"      ) return ImageType::stereo_raw_right;
+	if (name == "stereo_rectified_left" ) return ImageType::stereo_rectified_left;
+	if (name == "stereo_rectified_right") return ImageType::stereo_rectified_right;
+	if (name == "disparity"             ) return ImageType::disparity;
+	if (name == "monocular_raw"         ) return ImageType::monocular_raw;
+	if (name == "monocular_rectified"   ) return ImageType::monocular_rectified;
 	throw std::runtime_error("Unknown image type: " + name);
 }
 
@@ -104,7 +104,7 @@ class EnsensoNode: public Node {
 	std::string serial;
 
 	/// The type of the color image.
-	ImageType image_type;
+	ImageType image_source;
 
 	/// If true, registers the point clouds.
 	bool register_pointcloud;
@@ -230,7 +230,7 @@ protected:
 		// load ROS parameters
 		camera_frame        = getParam<std::string>("camera_frame", "camera_frame");
 		camera_data_path    = getParam<std::string>("camera_data_path", "camera_data");
-		image_type          = parseImageType(getParam<std::string>("image_type"));
+		image_source        = parseImageType(getParam<std::string>("image_source"));
 		register_pointcloud = getParam<bool>("register_pointcloud");
 		synced_retrieve     = getParam<bool>("synced_retrieve", true);
 		publish_data        = getParam<bool>("publish_data",    true);
@@ -326,7 +326,7 @@ protected:
 	}
 
 	bool needMonocular() {
-		return register_pointcloud || isMonocular(image_type);
+		return register_pointcloud || isMonocular(image_source);
 	}
 
 	void publishImage(ros::TimerEvent const &) {
@@ -342,7 +342,7 @@ protected:
 		// Prepare message.
 		cv_bridge::CvImage cv_image(
 			header,
-			encoding(image_type),
+			encoding(image_source),
 			getImage()
 		);
 
@@ -371,14 +371,14 @@ protected:
 			if (needMonocular()) ensenso_camera->retrieve(true, 1500, false, true);
 			ensenso_camera->retrieve(true, 1500, true, false);
 		}
-		if (point_cloud || needsRectification(image_type))     ensenso_camera->rectifyImages();
-		if (point_cloud || image_type == ImageType::disparity) ensenso_camera->computeDisparity();
+		if (point_cloud || needsRectification(image_source))     ensenso_camera->rectifyImages();
+		if (point_cloud || image_source == ImageType::disparity) ensenso_camera->computeDisparity();
 		if (point_cloud)                                       ensenso_camera->computePointCloud();
 		if (point_cloud && register_pointcloud)                ensenso_camera->registerPointCloud();
 	}
 
 	cv::Mat getImage() {
-		return ensenso_camera->loadImage(image_type);
+		return ensenso_camera->loadImage(image_source);
 	}
 
 	pcl::PointCloud<pcl::PointXYZ> getPointCloud() {
@@ -402,7 +402,7 @@ protected:
 		// Get the image.
 		cv_bridge::CvImage cv_image(
 			res.point_cloud.header,
-			encoding(image_type),
+			encoding(image_source),
 			data->image
 		);
 		res.color = *cv_image.toImageMsg();
