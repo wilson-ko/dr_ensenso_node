@@ -112,6 +112,9 @@ class EnsensoNode: public Node {
 	/// If true, retrieves the monocular camera and Ensenso simultaneously. A hardware trigger is advised to remove the projector from the uEye image.
 	bool synced_retrieve;
 
+	/// If true, and synced_retrieve is false, enable the front light when recording 2D images.
+	bool front_light;
+
 	/// The frame in which the image and point clouds are send.
 	std::string camera_frame;
 
@@ -233,6 +236,7 @@ protected:
 		image_source        = parseImageType(getParam<std::string>("image_source"));
 		register_pointcloud = getParam<bool>("register_point_cloud");
 		synced_retrieve     = getParam<bool>("synced_retrieve", true);
+		front_light         = getParam<bool>("front_light",     false);
 		publish_data        = getParam<bool>("publish_data",    true);
 		save_data           = getParam<bool>("save_data",       true);
 
@@ -332,7 +336,7 @@ protected:
 	void publishImage(ros::TimerEvent const &) {
 		if (publishers.image.getNumSubscribers() == 0) return;
 
-		captureData(false);
+		cv::Mat image = loadSeparateImage();
 
 		// Create a header.
 		std_msgs::Header header;
@@ -343,7 +347,7 @@ protected:
 		cv_bridge::CvImage cv_image(
 			header,
 			encoding(image_source),
-			getImage()
+			std::move(image)
 		);
 
 		// Publish the image to the live stream.
@@ -364,19 +368,6 @@ protected:
 		cv::imwrite(camera_data_path + "/" + time_string + ".png", image);
 	}
 
-	void captureData(bool point_cloud = true) {
-		if (synced_retrieve) {
-			ensenso_camera->retrieve(true, 1500, true, needMonocular());
-		} else {
-			if (needMonocular()) ensenso_camera->retrieve(true, 1500, false, true);
-			ensenso_camera->retrieve(true, 1500, true, false);
-		}
-		if (point_cloud || needsRectification(image_source))     ensenso_camera->rectifyImages();
-		if (point_cloud || image_source == ImageType::disparity) ensenso_camera->computeDisparity();
-		if (point_cloud)                                       ensenso_camera->computePointCloud();
-		if (point_cloud && register_pointcloud)                ensenso_camera->registerPointCloud();
-	}
-
 	cv::Mat getImage() {
 		return ensenso_camera->loadImage(image_source);
 	}
@@ -389,9 +380,58 @@ protected:
 		}
 	}
 
-	boost::optional<Data> getData() {
-		captureData();
+	boost::optional<Data> getSyncData() {
+		ensenso_camera->retrieve(true, 1500, true, needMonocular());
+		ensenso_camera->rectifyImages();
+		ensenso_camera->computeDisparity();
+		ensenso_camera->computePointCloud();
+		if (register_pointcloud) ensenso_camera->registerPointCloud();
 		return Data{getPointCloud(), getImage()};
+	}
+
+	cv::Mat loadSeparateImage() {
+		// Disable flex view and projector for 2D image.
+		// Optionally enable front light.
+		int flex_view = ensenso_camera->flexView();
+		bool projector = ensenso_camera->projector();
+		bool front_light = ensenso_camera->frontLight();
+
+		if (!synced_retrieve) {
+			ensenso_camera->setFlexView(0);
+			ensenso_camera->setProjector(false);
+			ensenso_camera->setFrontLight(this->front_light);
+		}
+
+		// Process and retrieve 2D image.
+		ensenso_camera->retrieve(true, 1500, !needMonocular(), needMonocular());
+		if (needsRectification(image_source)) ensenso_camera->rectifyImages();
+		if (image_source == ImageType::disparity) ensenso_camera->computeDisparity();
+		cv::Mat image = getImage();
+
+		/// Restore settings.
+		if (!synced_retrieve) {
+			ensenso_camera->setFlexView(flex_view);
+			ensenso_camera->setProjector(projector);
+			ensenso_camera->setFrontLight(front_light);
+		}
+
+		return std::move(image);
+	}
+
+	boost::optional<Data> getSeparateData() {
+		cv::Mat image = loadSeparateImage();
+
+		/// Capture point cloud.
+		ensenso_camera->retrieve(true, 1500, true, false);
+		ensenso_camera->rectifyImages();
+		ensenso_camera->computeDisparity();
+		ensenso_camera->computePointCloud();
+		if (register_pointcloud) ensenso_camera->registerPointCloud();
+		return Data{getPointCloud(), std::move(image)};
+	}
+
+	boost::optional<Data> getData() {
+		return synced_retrieve ? getSyncData() : getSeparateData();
 	}
 
 	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
