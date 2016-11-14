@@ -110,9 +110,9 @@ class EnsensoNode: public Node {
 	bool register_pointcloud;
 
 	/// If true, retrieves the monocular camera and Ensenso simultaneously. A hardware trigger is advised to remove the projector from the uEye image.
-	bool synced_retrieve;
+	bool separate_trigger;
 
-	/// If true, and synced_retrieve is false, enable the front light when recording 2D images.
+	/// If true, and separate_trigger is true, enable the front light when recording 2D images.
 	bool front_light;
 
 	/// The frame in which the image and point clouds are send.
@@ -235,7 +235,7 @@ protected:
 		camera_data_path    = getParam<std::string>("camera_data_path", "camera_data");
 		image_source        = parseImageType(getParam<std::string>("image_source"));
 		register_pointcloud = getParam<bool>("register_point_cloud");
-		synced_retrieve     = getParam<bool>("synced_retrieve", true);
+		separate_trigger    = getParam<bool>("separate_trigger", true);
 		front_light         = getParam<bool>("front_light",     false);
 		publish_data        = getParam<bool>("publish_data",    true);
 		save_data           = getParam<bool>("save_data",       true);
@@ -354,7 +354,6 @@ protected:
 		publishers.live.publish(cv_image.toImageMsg());
 	}
 
-
 	void saveData(PointCloud const & point_cloud, cv::Mat const & image) {
 		// create path if it does not exist
 		boost::filesystem::path path(camera_data_path);
@@ -368,11 +367,11 @@ protected:
 		cv::imwrite(camera_data_path + "/" + time_string + ".png", image);
 	}
 
-	cv::Mat getImage() {
+	cv::Mat loadImage() {
 		return ensenso_camera->loadImage(image_source);
 	}
 
-	pcl::PointCloud<pcl::PointXYZ> getPointCloud() {
+	pcl::PointCloud<pcl::PointXYZ> loadPointCloud() {
 		pcl::PointCloud<pcl::PointXYZ> cloud;
 		if (register_pointcloud) {
 			cloud = ensenso_camera->loadRegisteredPointCloud();
@@ -383,16 +382,7 @@ protected:
 		return std::move(cloud);
 	}
 
-	boost::optional<Data> getSyncData() {
-		ensenso_camera->retrieve(true, 1500, true, needMonocular());
-		ensenso_camera->rectifyImages();
-		ensenso_camera->computeDisparity();
-		ensenso_camera->computePointCloud();
-		if (register_pointcloud) ensenso_camera->registerPointCloud();
-		return Data{getPointCloud(), getImage()};
-	}
-
-	cv::Mat loadSeparateImage() {
+	cv::Mat captureAndLoadImage() {
 		// Disable flex view and projector for 2D image.
 		// Optionally enable front light.
 		int flex_view = ensenso_camera->flexView();
@@ -409,7 +399,7 @@ protected:
 		ensenso_camera->retrieve(true, 1500, !needMonocular(), needMonocular());
 		if (needsRectification(image_source)) ensenso_camera->rectifyImages();
 		if (image_source == ImageType::disparity) ensenso_camera->computeDisparity();
-		cv::Mat image = getImage();
+		cv::Mat image = loadImage();
 
 		/// Restore settings.
 		if (!synced_retrieve) {
@@ -421,25 +411,46 @@ protected:
 		return std::move(image);
 	}
 
-	boost::optional<Data> getSeparateData() {
-		cv::Mat image = loadSeparateImage();
-
+	pcl::PointCloud<pcl::PointXYZ> captureAndLoadPointCloud() {
 		/// Capture point cloud.
 		ensenso_camera->retrieve(true, 1500, true, false);
 		ensenso_camera->rectifyImages();
 		ensenso_camera->computeDisparity();
 		ensenso_camera->computePointCloud();
 		if (register_pointcloud) ensenso_camera->registerPointCloud();
-		return Data{getPointCloud(), std::move(image)};
+		return Data{loadPointCloud(), std::move(image)};
 	}
 
-	boost::optional<Data> getData() {
-		return synced_retrieve ? getSyncData() : getSeparateData();
+	/// Capture and load the point cloud and 2D image in seperate steps.
+	/**
+	 * This function also disables the projector when capturing the 2D image,
+	 * so the projected pattern is not visible.
+	 *
+	 * Note that this will likely result in very poor disparity images,
+	 * so use of the synchronised captureAndLoadData() is probably more suitable
+	 * in that case.
+	 */
+	Data captureAndLoadDataSeparately() {
+		return {loadSeparateImage(), captureAndLoadPointCloud()};
+	}
+
+	/// Capture and load the point cloud and 2D image in a single capture step.
+	/**
+	 * Note that this may result in the projector pattern being visible on the 2D image.
+	 * See captureAndLoadDataSeperately() for a way to avoid this.
+	 */
+	Data captureAndLoadData() {
+		ensenso_camera->retrieve(true, 1500, true, needMonocular());
+		ensenso_camera->rectifyImages();
+		ensenso_camera->computeDisparity();
+		ensenso_camera->computePointCloud();
+		if (register_pointcloud) ensenso_camera->registerPointCloud();
+		return Data{loadPointCloud(), loadImage()};
 	}
 
 	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
-		boost::optional<Data> data = getData();
-		if (!data) return false;
+		Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
+
 		pcl::toROSMsg(data->cloud, res.point_cloud);
 
 		// Get the image.
