@@ -373,11 +373,14 @@ protected:
 	}
 
 	pcl::PointCloud<pcl::PointXYZ> getPointCloud() {
+		pcl::PointCloud<pcl::PointXYZ> cloud;
 		if (register_pointcloud) {
-			return ensenso_camera->loadRegisteredPointCloud();
+			cloud = ensenso_camera->loadRegisteredPointCloud();
 		} else {
-			return ensenso_camera->loadPointCloud();
+			cloud = ensenso_camera->loadPointCloud();
 		}
+		cloud.header.frame_id = camera_frame;
+		return std::move(cloud);
 	}
 
 	boost::optional<Data> getSyncData() {
