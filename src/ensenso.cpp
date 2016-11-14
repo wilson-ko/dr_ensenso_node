@@ -235,7 +235,7 @@ protected:
 		camera_data_path    = getParam<std::string>("camera_data_path", "camera_data");
 		image_source        = parseImageType(getParam<std::string>("image_source"));
 		register_pointcloud = getParam<bool>("register_point_cloud");
-		separate_trigger    = getParam<bool>("separate_trigger", true);
+		separate_trigger    = getParam<bool>("separate_trigger", false);
 		front_light         = getParam<bool>("front_light",     false);
 		publish_data        = getParam<bool>("publish_data",    true);
 		save_data           = getParam<bool>("save_data",       true);
@@ -336,7 +336,7 @@ protected:
 	void publishImage(ros::TimerEvent const &) {
 		if (publishers.image.getNumSubscribers() == 0) return;
 
-		cv::Mat image = loadSeparateImage();
+		cv::Mat image = captureAndLoadImage();
 
 		// Create a header.
 		std_msgs::Header header;
@@ -389,7 +389,7 @@ protected:
 		bool projector = ensenso_camera->projector();
 		bool front_light = ensenso_camera->frontLight();
 
-		if (!synced_retrieve) {
+		if (separate_trigger) {
 			ensenso_camera->setFlexView(0);
 			ensenso_camera->setProjector(false);
 			ensenso_camera->setFrontLight(this->front_light);
@@ -402,7 +402,7 @@ protected:
 		cv::Mat image = loadImage();
 
 		/// Restore settings.
-		if (!synced_retrieve) {
+		if (separate_trigger) {
 			ensenso_camera->setFlexView(flex_view);
 			ensenso_camera->setProjector(projector);
 			ensenso_camera->setFrontLight(front_light);
@@ -418,7 +418,7 @@ protected:
 		ensenso_camera->computeDisparity();
 		ensenso_camera->computePointCloud();
 		if (register_pointcloud) ensenso_camera->registerPointCloud();
-		return Data{loadPointCloud(), std::move(image)};
+		return loadPointCloud();
 	}
 
 	/// Capture and load the point cloud and 2D image in seperate steps.
@@ -431,7 +431,7 @@ protected:
 	 * in that case.
 	 */
 	Data captureAndLoadDataSeparately() {
-		return {loadSeparateImage(), captureAndLoadPointCloud()};
+		return {captureAndLoadPointCloud(), captureAndLoadImage()};
 	}
 
 	/// Capture and load the point cloud and 2D image in a single capture step.
@@ -451,13 +451,13 @@ protected:
 	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
 		Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
 
-		pcl::toROSMsg(data->cloud, res.point_cloud);
+		pcl::toROSMsg(data.cloud, res.point_cloud);
 
 		// Get the image.
 		cv_bridge::CvImage cv_image(
 			res.point_cloud.header,
 			encoding(image_source),
-			data->image
+			data.image
 		);
 		res.color = *cv_image.toImageMsg();
 
@@ -466,14 +466,14 @@ protected:
 			thread_pool.enqueue(
 				&EnsensoNode::saveData,
 				this,
-				data->cloud,
-				data->image
+				data.cloud,
+				data.image
 			);
 		}
 
 		// publish point cloud if requested
 		if (publish_data) {
-			publishers.cloud.publish(data->cloud);
+			publishers.cloud.publish(data.cloud);
 			publishers.image.publish(res.color);
 		}
 
@@ -481,16 +481,15 @@ protected:
 	}
 
 	bool onSaveData(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
-		boost::optional<Data> data = getData();
-		if (!data) return false;
+		Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
 
-			// store point cloud and image in a separate thread
-			thread_pool.enqueue(
-				&EnsensoNode::saveData,
-				this,
-				data->cloud,
-				data->image
-			);
+		// store point cloud and image in a separate thread
+		thread_pool.enqueue(
+			&EnsensoNode::saveData,
+			this,
+			data.cloud,
+			data.image
+		);
 		return true;
 	}
 
