@@ -379,7 +379,7 @@ protected:
 			cloud = ensenso_camera->loadPointCloud();
 		}
 		cloud.header.frame_id = camera_frame;
-		return std::move(cloud);
+		return cloud;
 	}
 
 	cv::Mat captureAndLoadImage() {
@@ -408,7 +408,7 @@ protected:
 			ensenso_camera->setFrontLight(front_light);
 		}
 
-		return std::move(image);
+		return image;
 	}
 
 	pcl::PointCloud<pcl::PointXYZ> captureAndLoadPointCloud() {
