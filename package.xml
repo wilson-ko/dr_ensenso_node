@@ -17,6 +17,7 @@
 	<depend>dr_ensenso</depend>
 	<depend>dr_ensenso_msgs</depend>
 	<depend>dr_msgs</depend>
+	<depend>dr_opencv</depend>
 	<depend>dr_ros</depend>
 	<depend>dr_thread</depend>
 	<depend>dr_util</depend>

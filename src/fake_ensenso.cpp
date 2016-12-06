@@ -6,6 +6,7 @@
 #include <dr_ensenso_msgs/DetectCalibrationPattern.h>
 #include <dr_msgs/SendPose.h>
 #include <dr_msgs/SendPoseStamped.h>
+#include <dr_opencv/ros.hpp>
 
 #include <dr_param/param.hpp>
 #include <dr_ros/node.hpp>
@@ -117,7 +118,7 @@ private:
 		if (!boost::filesystem::exists(point_cloud_file)) DR_ERROR("Failed to load point cloud: File does not exist: " << point_cloud_file);
 
 		// load image
-		image = cv::imread(image_file);
+		image = cv::imread(image_file, cv::IMREAD_UNCHANGED);
 		if (image.empty()) {
 			DR_ERROR("Failed to load image from path: " << image_file);
 			return false;
@@ -133,8 +134,7 @@ private:
 		std_msgs::Header header;
 		header.frame_id = camera_frame;
 		header.stamp = ros::Time::now();
-		cv_bridge::CvImage cv_image(header, sensor_msgs::image_encodings::BGR8, image);
-		res.color = *cv_image.toImageMsg();
+		res.color = toRos(image, header);
 
 		// copy the point cloud
 		pcl::toROSMsg(point_cloud, res.point_cloud);
