@@ -363,7 +363,7 @@ protected:
 
 		std::string time_string = getTimeString();
 
-		pcl::io::savePCDFileBinary(camera_data_path + "/" + time_string + ".pcd", point_cloud);
+		pcl::io::savePCDFileBinaryCompressed(camera_data_path + "/" + time_string + ".pcd", point_cloud);
 		cv::imwrite(camera_data_path + "/" + time_string + ".png", image);
 	}
 
