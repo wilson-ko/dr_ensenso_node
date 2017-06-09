@@ -382,7 +382,7 @@ protected:
 		return cloud;
 	}
 
-	cv::Mat captureAndLoadImage() {
+	void captureImage() {
 		// Disable flex view and projector for 2D image.
 		// Optionally enable front light.
 		int flex_view = ensenso_camera->flexView();
@@ -397,28 +397,22 @@ protected:
 
 		// Process and retrieve 2D image.
 		ensenso_camera->retrieve(true, 1500, !needMonocular(), needMonocular());
-		if (needsRectification(image_source)) ensenso_camera->rectifyImages();
-		if (image_source == ImageType::disparity) ensenso_camera->computeDisparity();
-		cv::Mat image = loadImage();
 
-		/// Restore settings.
+		// Restore settings.
 		if (separate_trigger) {
 			ensenso_camera->setFlexView(flex_view);
 			ensenso_camera->setProjector(projector);
 			ensenso_camera->setFrontLight(front_light);
 		}
-
-		return image;
 	}
 
-	pcl::PointCloud<pcl::PointXYZ> captureAndLoadPointCloud() {
-		/// Capture point cloud.
-		ensenso_camera->retrieve(true, 1500, true, false);
-		ensenso_camera->rectifyImages();
-		ensenso_camera->computeDisparity();
-		ensenso_camera->computePointCloud();
-		if (register_pointcloud) ensenso_camera->registerPointCloud();
-		return loadPointCloud();
+	cv::Mat captureAndLoadImage() {
+		captureImage();
+
+		if (needsRectification(image_source)) ensenso_camera->rectifyImages(false, true);
+		if (image_source == ImageType::disparity) ensenso_camera->computeDisparity();
+
+		return loadImage();
 	}
 
 	/// Capture and load the point cloud and 2D image in seperate steps.
@@ -431,7 +425,19 @@ protected:
 	 * in that case.
 	 */
 	Data captureAndLoadDataSeparately() {
-		return {captureAndLoadPointCloud(), captureAndLoadImage()};
+		// Capture point cloud.
+		ensenso_camera->retrieve(true, 1500, true, false);
+		ensenso_camera->computePointCloud();
+		ensenso_camera->computeDisparity();
+		ensenso_camera->rectifyImages(true, false);
+
+		// Capture image.
+		captureImage();
+
+		if (needMonocular()) ensenso_camera->rectifyImages(false, true);
+		if (register_pointcloud) ensenso_camera->registerPointCloud();
+
+		return {loadPointCloud(), loadImage()};
 	}
 
 	/// Capture and load the point cloud and 2D image in a single capture step.
@@ -441,10 +447,12 @@ protected:
 	 */
 	Data captureAndLoadData() {
 		ensenso_camera->retrieve(true, 1500, true, needMonocular());
-		ensenso_camera->rectifyImages();
+
+		ensenso_camera->rectifyImages(true, needMonocular());
 		ensenso_camera->computeDisparity();
 		ensenso_camera->computePointCloud();
 		if (register_pointcloud) ensenso_camera->registerPointCloud();
+
 		return Data{loadPointCloud(), loadImage()};
 	}
 
