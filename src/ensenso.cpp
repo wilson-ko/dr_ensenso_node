@@ -427,8 +427,8 @@ protected:
 	Data captureAndLoadDataSeparately() {
 		// Capture point cloud.
 		ensenso_camera->retrieve(true, 1500, true, false);
-		ensenso_camera->computePointCloud();
 		ensenso_camera->computeDisparity();
+		ensenso_camera->computePointCloud();
 		ensenso_camera->rectifyImages(true, false);
 
 		// Capture image.
