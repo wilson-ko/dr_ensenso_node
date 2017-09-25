@@ -93,16 +93,16 @@ public:
 		publishers.cloud                    = advertise<sensor_msgs::PointCloud2>("cloud", 1, true);
 		publishers.image                    = image_transport.advertise("image", 1, true);
 
-		servers.camera_data                 = advertiseService("get_data"                   , &FakeEnsensoNode::onGetData                   , this);
-		servers.dump_data                   = advertiseService("dump_data"                  , &FakeEnsensoNode::onDumpData                  , this);
-		servers.detect_calibration_pattern  = advertiseService("get_pattern_pose"           , &FakeEnsensoNode::onDetectCalibrationPattern  , this);
-		servers.initialize_calibration      = advertiseService("initialize_calibration"     , &FakeEnsensoNode::onInitializeCalibration     , this);
-		servers.record_calibration          = advertiseService("record_calibration"         , &FakeEnsensoNode::onRecordCalibration         , this);
-		servers.finalize_calibration        = advertiseService("finalize_calibration"       , &FakeEnsensoNode::onFinalizeCalibration       , this);
-		servers.set_workspace_calibration   = advertiseService("set_workspace_calibration"  , &FakeEnsensoNode::onSetWorkspaceCalibration   , this);
-		servers.clear_workspace_calibration = advertiseService("clear_workspace_calibration", &FakeEnsensoNode::onClearWorkspaceCalibration , this);
-		servers.calibrate_workspace         = advertiseService("calibrate"                  , &FakeEnsensoNode::onCalibrateWorkspace        , this);
-		servers.store_workspace_calibration = advertiseService("store_calibration"          , &FakeEnsensoNode::onStoreWorkspaceCalibration , this);
+		servers.camera_data                 = advertiseService("get_data"                    , &FakeEnsensoNode::onGetData                   , this);
+		servers.dump_data                   = advertiseService("dump_data"                   , &FakeEnsensoNode::onDumpData                  , this);
+		servers.detect_calibration_pattern  = advertiseService("detect_calibration_pattern"  , &FakeEnsensoNode::onDetectCalibrationPattern  , this);
+		servers.initialize_calibration      = advertiseService("initialize_calibration"      , &FakeEnsensoNode::onInitializeCalibration     , this);
+		servers.record_calibration          = advertiseService("record_calibration"          , &FakeEnsensoNode::onRecordCalibration         , this);
+		servers.finalize_calibration        = advertiseService("finalize_calibration"        , &FakeEnsensoNode::onFinalizeCalibration       , this);
+		servers.set_workspace_calibration   = advertiseService("set_workspace_calibration"   , &FakeEnsensoNode::onSetWorkspaceCalibration   , this);
+		servers.clear_workspace_calibration = advertiseService("clear_workspace_calibration" , &FakeEnsensoNode::onClearWorkspaceCalibration , this);
+		servers.calibrate_workspace         = advertiseService("calibrate_workspace"         , &FakeEnsensoNode::onCalibrateWorkspace        , this);
+		servers.store_workspace_calibration = advertiseService("store_workspace_calibration" , &FakeEnsensoNode::onStoreWorkspaceCalibration , this);
 		DR_SUCCESS("Fake Ensenso node initialized.");
 	}
 
