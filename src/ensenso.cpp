@@ -118,6 +118,9 @@ class EnsensoNode: public Node {
 	/// The frame in which the image and point clouds are send.
 	std::string camera_frame;
 
+	/// Timeout in milliseconds for retrieving.
+	unsigned int timeout;
+
 	struct {
 		/// Frame to calibrate the camera to when camera_moving is true (gripper frame).
 		std::string moving_frame;
@@ -239,6 +242,7 @@ protected:
 		front_light         = getParam<bool>("front_light",     false);
 		publish_data        = getParam<bool>("publish_data",    true);
 		save_data           = getParam<bool>("save_data",       true);
+		timeout             = getParam<int>("timeout",          1500);
 
 		// get Ensenso serial
 		serial = getParam<std::string>("serial", "");
@@ -396,7 +400,7 @@ protected:
 		}
 
 		// Process and retrieve 2D image.
-		ensenso_camera->retrieve(true, 1500, !needMonocular(), needMonocular());
+		ensenso_camera->retrieve(true, timeout, !needMonocular(), needMonocular());
 
 		// Restore settings.
 		if (separate_trigger) {
@@ -426,7 +430,7 @@ protected:
 	 */
 	Data captureAndLoadDataSeparately() {
 		// Capture point cloud.
-		ensenso_camera->retrieve(true, 1500, true, false);
+		ensenso_camera->retrieve(true, timeout, true, false);
 		ensenso_camera->computeDisparity();
 		ensenso_camera->computePointCloud();
 		ensenso_camera->rectifyImages(true, false);
@@ -446,7 +450,7 @@ protected:
 	 * See captureAndLoadDataSeperately() for a way to avoid this.
 	 */
 	Data captureAndLoadData() {
-		ensenso_camera->retrieve(true, 1500, true, needMonocular());
+		ensenso_camera->retrieve(true, timeout, true, needMonocular());
 
 		ensenso_camera->rectifyImages(true, needMonocular());
 		ensenso_camera->computeDisparity();
