@@ -28,9 +28,8 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-#include <boost/optional.hpp>
-
 #include <memory>
+#include <optional>
 
 namespace dr {
 
@@ -132,10 +131,10 @@ class EnsensoNode: public Node {
 		bool camera_moving;
 
 		// Guess of the camera pose relative to gripper (for moving camera) or relative to robot origin (for static camera).
-		boost::optional<Eigen::Isometry3d> camera_guess;
+		std::optional<Eigen::Isometry3d> camera_guess;
 
 		// Guess of the calibration pattern pose relative to gripper (for static camera) or relative to robot origin (for moving camera).
-		boost::optional<Eigen::Isometry3d> pattern_guess;
+		std::optional<Eigen::Isometry3d> pattern_guess;
 
 		/// List of robot poses corresponding to the list of recorded calibration patterns.
 		std::vector<Eigen::Isometry3d> robot_poses;
@@ -218,8 +217,8 @@ private:
 	void resetCalibration() {
 		auto_calibration.moving_frame  = "";
 		auto_calibration.fixed_frame   = "";
-		auto_calibration.camera_guess  = boost::none;
-		auto_calibration.pattern_guess = boost::none;
+		auto_calibration.camera_guess  = std::nullopt;
+		auto_calibration.pattern_guess = std::nullopt;
 		auto_calibration.robot_poses.clear();
 	}
 
@@ -538,7 +537,7 @@ protected:
 		// check for valid camera guess
 		if (req.camera_guess.position.x == 0 && req.camera_guess.position.y == 0 && req.camera_guess.position.z == 0 &&
 			req.camera_guess.orientation.x == 0 && req.camera_guess.orientation.y == 0 && req.camera_guess.orientation.z == 0 && req.camera_guess.orientation.w == 0) {
-			auto_calibration.camera_guess = boost::none;
+			auto_calibration.camera_guess = std::nullopt;
 		} else {
 			auto_calibration.camera_guess = dr::toEigen(req.camera_guess);
 		}
@@ -546,7 +545,7 @@ protected:
 		// check for valid pattern guess
 		if (req.pattern_guess.position.x == 0 && req.pattern_guess.position.y == 0 && req.pattern_guess.position.z == 0 &&
 			req.pattern_guess.orientation.x == 0 && req.pattern_guess.orientation.y == 0 && req.pattern_guess.orientation.z == 0 && req.pattern_guess.orientation.w == 0) {
-			auto_calibration.pattern_guess = boost::none;
+			auto_calibration.pattern_guess = std::nullopt;
 		} else {
 			auto_calibration.pattern_guess = dr::toEigen(req.pattern_guess);
 		}
