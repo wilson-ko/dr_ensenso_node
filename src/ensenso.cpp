@@ -390,12 +390,12 @@ protected:
 		// Optionally enable front light.
 		int flex_view = ensenso_camera->flexView();
 		bool projector = ensenso_camera->projector();
-		bool front_light = ensenso_camera->frontLight();
+		std::optional<bool> front_light = ensenso_camera->frontLight();
 
 		if (separate_trigger) {
 			ensenso_camera->setFlexView(0);
 			ensenso_camera->setProjector(false);
-			ensenso_camera->setFrontLight(this->front_light);
+			if (front_light) ensenso_camera->setFrontLight(this->front_light);
 		}
 
 		// Process and retrieve 2D image.
@@ -405,7 +405,7 @@ protected:
 		if (separate_trigger) {
 			ensenso_camera->setFlexView(flex_view);
 			ensenso_camera->setProjector(projector);
-			ensenso_camera->setFrontLight(front_light);
+			if (front_light) ensenso_camera->setFrontLight(*front_light);
 		}
 	}
 
