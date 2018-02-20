@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.8)
 project(dr_ensenso_node)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+add_compile_options(-Wall -Wextra -Wpedantic)
+
 find_package(catkin REQUIRED COMPONENTS
 	cv_bridge
-	dr_base
 	dr_eigen
 	dr_ensenso
 	dr_ensenso_msgs
@@ -22,9 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 catkin_package()
 
-dr_include_directories(
-	${catkin_INCLUDE_DIRS}
-)
+include_directories(SYSTEM ${catkin_INCLUDE_DIRS})
 
 add_executable(ensenso      src/ensenso.cpp)
 add_executable(fake_ensenso src/fake_ensenso.cpp)

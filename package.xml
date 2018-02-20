@@ -12,7 +12,6 @@
 
 	<buildtool_depend>catkin</buildtool_depend>
 	<depend>cv_bridge</depend>
-	<depend>dr_base</depend>
 	<depend>dr_eigen</depend>
 	<depend>dr_ensenso</depend>
 	<depend>dr_ensenso_msgs</depend>
