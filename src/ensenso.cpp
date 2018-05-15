@@ -388,12 +388,13 @@ protected:
 	void captureImage() {
 		// Disable flex view and projector for 2D image.
 		// Optionally enable front light.
-		int flex_view = ensenso_camera->flexView();
+		int flex_view = 0;
+		if (ensenso_camera->hasFlexView()) flex_view = ensenso_camera->flexView();
 		bool projector = ensenso_camera->projector();
 		std::optional<bool> front_light = ensenso_camera->frontLight();
 
 		if (separate_trigger) {
-			ensenso_camera->setFlexView(0);
+			if (ensenso_camera->hasFlexView()) ensenso_camera->setFlexView(0);
 			ensenso_camera->setProjector(false);
 			if (front_light) ensenso_camera->setFrontLight(this->front_light);
 		}
@@ -403,7 +404,7 @@ protected:
 
 		// Restore settings.
 		if (separate_trigger) {
-			ensenso_camera->setFlexView(flex_view);
+			if (ensenso_camera->hasFlexView()) ensenso_camera->setFlexView(flex_view);
 			ensenso_camera->setProjector(projector);
 			if (front_light) ensenso_camera->setFrontLight(*front_light);
 		}
