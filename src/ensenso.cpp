@@ -152,6 +152,9 @@ class EnsensoNode: public Node {
 	/// Thread pool for parallel work.
 	dr::ThreadPool thread_pool;
 
+	/// Flag to remember to exit cleanly or not.
+	bool clean_exit_ = true;
+
 	struct {
 		/// Service server for supplying point clouds and images.
 		ros::ServiceServer camera_data;
@@ -212,6 +215,10 @@ public:
 		configure();
 	}
 
+	bool cleanExit() const {
+		return clean_exit_;
+	}
+
 private:
 	/// Resets calibration state from this node.
 	void resetCalibration() {
@@ -230,6 +237,12 @@ protected:
 		PointCloud cloud;
 		cv::Mat image;
 	};
+
+	/// Exit uncleanly.
+	void die() {
+		clean_exit_ = false;
+		ros::NodeHandle::shutdown();
+	}
 
 	void configure() {
 		// load ROS parameters
@@ -281,12 +294,8 @@ protected:
 		// load ensenso parameters file
 		std::string ensenso_param_file = getParam<std::string>("ensenso_param_file", "");
 		if (ensenso_param_file != "") {
-			try {
-				if (!ensenso_camera->loadParameters(ensenso_param_file)) {
-					DR_ERROR("Failed to set Ensenso params. File path: " << ensenso_param_file);
-				}
-			} catch (dr::NxError const & e) {
-				DR_ERROR("Failed to set Ensenso params. " << e.what());
+			if (!ensenso_camera->loadParameters(ensenso_param_file)) {
+				throw std::runtime_error("Failed to set Ensenso params. File path: " + ensenso_param_file);
 			}
 		}
 
@@ -294,23 +303,15 @@ protected:
 			// load monocular parameters file
 			std::string monocular_param_file = getParam<std::string>("monocular_param_file", "");
 			if (monocular_param_file != "") {
-				try {
-					if (!ensenso_camera->loadMonocularParameters(monocular_param_file)) {
-						DR_ERROR("Failed to set monocular camera params. File path: " << monocular_param_file);
-					}
-				} catch (dr::NxError const & e) {
-					DR_ERROR("Failed to set monocular camera params. " << e.what());
+				if (!ensenso_camera->loadMonocularParameters(monocular_param_file)) {
+					throw std::runtime_error("Failed to set monocular camera params. File path: " + monocular_param_file);
 				}
 			}
 
 			// load monocular parameter set file
 			std::string monocular_ueye_param_file = getParam<std::string>("monocular_ueye_param_file", "");
 			if (monocular_ueye_param_file != "") {
-				try {
-					ensenso_camera->loadMonocularUeyeParameters(monocular_ueye_param_file);
-				} catch (dr::NxError const & e) {
-					DR_ERROR("Failed to set monocular param set file. " << e.what());
-				}
+				ensenso_camera->loadMonocularUeyeParameters(monocular_ueye_param_file);
 			}
 		}
 
@@ -461,35 +462,46 @@ protected:
 	}
 
 	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
-		Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
+		try {
+			Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
 
-		pcl::toROSMsg(data.cloud, res.point_cloud);
+			pcl::toROSMsg(data.cloud, res.point_cloud);
 
-		// Get the image.
-		cv_bridge::CvImage cv_image(
-			res.point_cloud.header,
-			encoding(image_source),
-			data.image
-		);
-		res.color = *cv_image.toImageMsg();
-
-		// Store image and point cloud.
-		if (save_data) {
-			thread_pool.enqueue(
-				&EnsensoNode::saveData,
-				this,
-				data.cloud,
+			// Get the image.
+			cv_bridge::CvImage cv_image(
+				res.point_cloud.header,
+				encoding(image_source),
 				data.image
 			);
-		}
+			res.color = *cv_image.toImageMsg();
 
-		// publish point cloud if requested
-		if (publish_data) {
-			publishers.cloud.publish(data.cloud);
-			publishers.image.publish(res.color);
-		}
+			// Store image and point cloud.
+			if (save_data) {
+				thread_pool.enqueue(
+					&EnsensoNode::saveData,
+					this,
+					data.cloud,
+					data.image
+				);
+			}
 
-		return true;
+			// publish point cloud if requested
+			if (publish_data) {
+				publishers.cloud.publish(data.cloud);
+				publishers.image.publish(res.color);
+			}
+
+			return true;
+		} catch (std::exception const & e) {
+			DR_ERROR("Failed to record camera data: " << e.what());
+			die();
+			throw;
+		} catch (...) {
+			DR_ERROR("Failed to record camera data: an unknown exception occured");
+			ros::NodeHandle::shutdown();
+			die();
+			throw;
+		}
 	}
 
 	bool onSaveData(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
@@ -702,5 +714,7 @@ int main(int argc, char ** argv) {
 	dr::EnsensoNode node;
 	ros::spin();
 	DR_INFO("Closing camera. This may take a (long) while.");
+
+	return node.cleanExit() ? 0 : 1;
 }
 
