@@ -11,6 +11,7 @@
 #include <dr_ensenso_msgs/GetCameraData.h>
 #include <dr_ensenso_msgs/DetectCalibrationPattern.h>
 #include <dr_ensenso_msgs/InitializeCalibration.h>
+#include <dr_msgs/GetPose.h>
 #include <dr_msgs/SendPose.h>
 #include <dr_msgs/SendPoseStamped.h>
 
@@ -182,6 +183,12 @@ class EnsensoNode: public Node {
 
 		/// Service server for finalizing the calibration.
 		ros::ServiceServer finalize_calibration;
+
+		/// Service server for getting the link isometry between the robot and the stereo camera.
+		ros::ServiceServer get_workspace_calibration;
+
+		// Service server for getting the link isometry between the stereo camera and the monocular camera.
+		ros::ServiceServer get_monocular_link;
 	} servers;
 
 	struct Publishers {
@@ -271,6 +278,8 @@ protected:
 		servers.clear_workspace_calibration = advertiseService("clear_workspace_calibration", &EnsensoNode::onClearWorkspaceCalibration, this);
 		servers.calibrate_workspace         = advertiseService("calibrate_workspace"        , &EnsensoNode::onCalibrateWorkspace       , this);
 		servers.store_workspace_calibration = advertiseService("store_workspace_calibration", &EnsensoNode::onStoreWorkspaceCalibration, this);
+		servers.get_workspace_calibration   = advertiseService("get_workspace_calibration"  , &EnsensoNode::onGetWorkspaceCalibration  , this);
+		servers.get_monocular_link          = advertiseService("get_monocular_link"         , &EnsensoNode::onGetMonocularLink         , this);
 
 		// activate publishers
 		publishers.calibration = advertise<geometry_msgs::PoseStamped>("calibration", 1, true);
@@ -691,6 +700,25 @@ protected:
 		}
 
 		publishers.calibration.publish(pose);
+	}
+
+	bool onGetWorkspaceCalibration(dr_msgs::GetPose::Request &, dr_msgs::GetPose::Response & res) {
+		std::optional<Eigen::Isometry3d> workspace_calibration = ensenso_camera->getWorkspaceCalibration();
+		if (!workspace_calibration) return false;
+
+		res.data = toRosPose(*workspace_calibration);
+
+		return true;
+	}
+	
+	bool onGetMonocularLink(dr_msgs::GetPose::Request &, dr_msgs::GetPose::Response & res) {
+		if (ensenso_camera->hasMonocular()) {
+			res.data = toRosPose(ensenso_camera->getMonocularLink());
+			return true;
+		} else {
+			throw std::runtime_error("No monocular camera.");
+			return false;
+		}
 	}
 };
 
