@@ -2,6 +2,7 @@
 #include <dr_eigen/yaml.hpp>
 #include <dr_ensenso/ensenso.hpp>
 #include <dr_ensenso/util.hpp>
+#include <dr_pcl/write.hpp>
 #include <dr_ros/node.hpp>
 #include <dr_thread/thread_pool.hpp>
 #include <dr_util/timestamp.hpp>
@@ -376,7 +377,7 @@ protected:
 
 		std::string time_string = getTimeString();
 
-		pcl::io::savePCDFileBinaryCompressed(camera_data_path + "/" + time_string + ".pcd", point_cloud);
+		writePcdBinaryCompressed(camera_data_path + "/" + time_string + ".pcd", point_cloud);
 		cv::imwrite(camera_data_path + "/" + time_string + ".png", image);
 	}
 
