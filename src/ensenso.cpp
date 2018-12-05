@@ -30,6 +30,8 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+#include <systemd/sd-daemon.h>
+
 #include <memory>
 #include <optional>
 
@@ -272,6 +274,7 @@ protected:
 			DR_INFO("Opening first available Ensenso...");
 		}
 
+		::sd_notify(false, "STATUS=opening Ensenso");
 		try {
 			// create the camera
 			ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular());
@@ -340,6 +343,8 @@ protected:
 			publish_images_timer = createTimer(ros::Rate(publish_images_rate), &EnsensoNode::publishImage, this);
 		}
 
+		::sd_notify(false, "STATUS=listening");
+		::sd_notify(false, "READY=1");
 		DR_SUCCESS("Ensenso opened successfully.");
 	}
 
