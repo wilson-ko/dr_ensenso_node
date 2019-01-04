@@ -502,6 +502,11 @@ protected:
 			}
 
 			return true;
+		} catch (NxCommandError const & e) {
+			if (e.error_symbol() != errCaptureTimeout) {
+				die();
+			}
+			throw;
 		} catch (std::exception const & e) {
 			DR_ERROR("Failed to record camera data: " << e.what());
 			die();
