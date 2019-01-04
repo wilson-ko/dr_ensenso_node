@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -Wextra -Wpedantic)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
 find_package(catkin REQUIRED COMPONENTS
 	cv_bridge
 	dr_eigen
@@ -24,6 +26,8 @@ find_package(catkin REQUIRED COMPONENTS
 	tf2_ros
 )
 
+find_package(systemd)
+
 catkin_package()
 
 include_directories(SYSTEM ${catkin_INCLUDE_DIRS})
@@ -31,7 +35,7 @@ include_directories(SYSTEM ${catkin_INCLUDE_DIRS})
 add_executable(ensenso      src/ensenso.cpp)
 add_executable(fake_ensenso src/fake_ensenso.cpp)
 add_executable(calibrate    src/calibrate.cpp)
-target_link_libraries(ensenso      ${catkin_LIBRARIES})
+target_link_libraries(ensenso      ${catkin_LIBRARIES} systemd)
 target_link_libraries(fake_ensenso ${catkin_LIBRARIES})
 target_link_libraries(calibrate    ${catkin_LIBRARIES})
 
