@@ -249,7 +249,7 @@ protected:
 	/// Exit uncleanly.
 	void die() {
 		clean_exit_ = false;
-		ros::NodeHandle::shutdown();
+		ros::shutdown();
 	}
 
 	void configure() {
