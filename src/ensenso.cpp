@@ -650,12 +650,7 @@ protected:
 			// store result in camera
 			ensenso_camera->storeWorkspaceCalibration();
 
-			// clear state
-			resetCalibration();
 		} catch (dr::NxError const & e) {
-			// clear state (?)
-			resetCalibration();
-
 			DR_ERROR("Failed to finalize calibration. " << e.what());
 			return false;
 		}
