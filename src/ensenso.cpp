@@ -642,10 +642,10 @@ protected:
 				);
 
 			// copy result
-			res.camera_pose        = dr::toRosPoseStamped(std::get<0>(calibration), camera_moving ? moving_frame :  fixed_frame);
-			res.pattern_pose       = dr::toRosPoseStamped(std::get<1>(calibration), camera_moving ?  fixed_frame : moving_frame);
-			res.iterations         = std::get<2>(calibration);
-			res.reprojection_error = std::get<3>(calibration);
+			res.camera_pose    = dr::toRosPoseStamped(std::get<0>(calibration), camera_moving ? moving_frame :  fixed_frame);
+			res.pattern_pose   = dr::toRosPoseStamped(std::get<1>(calibration), camera_moving ?  fixed_frame : moving_frame);
+			res.iterations     = std::get<2>(calibration);
+			res.residual_error = std::get<3>(calibration);
 
 			// store result in camera
 			ensenso_camera->storeWorkspaceCalibration();
