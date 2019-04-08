@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
 	dr_ros
 	dr_thread
 	dr_util
+	estd
 	image_transport
 	pcl_ros
 	roscpp
@@ -28,19 +29,26 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(systemd)
 
-catkin_package()
+catkin_package(
+	INCLUDE_DIRS include
+	LIBRARIES ensenso_calibrator
+	CATKIN_DEPENDS dr_eigen
+)
 
 include_directories(SYSTEM ${catkin_INCLUDE_DIRS})
+include_directories(include/${PROJECT_NAME})
 
-add_executable(ensenso      src/ensenso.cpp)
-add_executable(fake_ensenso src/fake_ensenso.cpp)
-add_executable(calibrate    src/calibrate.cpp)
-target_link_libraries(ensenso      ${catkin_LIBRARIES} systemd)
-target_link_libraries(fake_ensenso ${catkin_LIBRARIES})
-target_link_libraries(calibrate    ${catkin_LIBRARIES})
+add_executable(ensenso            src/ensenso.cpp)
+add_executable(fake_ensenso       src/fake_ensenso.cpp)
+add_executable(calibrate          src/calibrate.cpp)
+add_library   (ensenso_calibrator src/ensenso_calibrator.cpp)
+target_link_libraries(ensenso            ${catkin_LIBRARIES} systemd)
+target_link_libraries(fake_ensenso       ${catkin_LIBRARIES})
+target_link_libraries(calibrate          ${catkin_LIBRARIES})
+target_link_libraries(ensenso_calibrator ${catkin_LIBRARIES})
 
 install(
-	TARGETS ensenso fake_ensenso calibrate
+	TARGETS ensenso fake_ensenso calibrate ensenso_calibrator
 	ARCHIVE DESTINATION "${CATKIN_PACKAGE_LIB_DESTINATION}"
 	LIBRARY DESTINATION "${CATKIN_PACKAGE_LIB_DESTINATION}"
 	RUNTIME DESTINATION "${CATKIN_PACKAGE_BIN_DESTINATION}"
