@@ -12,6 +12,7 @@
 #include <dr_ensenso_msgs/GetCameraData.h>
 #include <dr_ensenso_msgs/DetectCalibrationPattern.h>
 #include <dr_ensenso_msgs/InitializeCalibration.h>
+#include <dr_ensenso_msgs/DumpJson.h>
 #include <dr_msgs/GetPose.h>
 #include <dr_msgs/SendPose.h>
 #include <dr_msgs/SendPoseStamped.h>
@@ -195,6 +196,9 @@ class EnsensoNode: public Node {
 
 		// Service server for getting the link isometry between the stereo camera and the monocular camera.
 		ros::ServiceServer get_monocular_link;
+
+		// Service server for dumping json data from the NxLib tree.
+		ros::ServiceServer dump_json;
 	} servers;
 
 	struct Publishers {
@@ -297,6 +301,7 @@ protected:
 		servers.store_workspace_calibration = advertiseService("store_workspace_calibration", &EnsensoNode::onStoreWorkspaceCalibration, this);
 		servers.get_workspace_calibration   = advertiseService("get_workspace_calibration"  , &EnsensoNode::onGetWorkspaceCalibration  , this);
 		servers.get_monocular_link          = advertiseService("get_monocular_link"         , &EnsensoNode::onGetMonocularLink         , this);
+		servers.dump_json                   = advertiseService("dump_json"                  , &EnsensoNode::onDumpJson                 , this);
 
 		// activate publishers
 		publishers.calibration = advertise<geometry_msgs::PoseStamped>("calibration", 1, true);
@@ -601,12 +606,24 @@ protected:
 			return false;
 		}
 
+		int old_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
+
 		try {
 			// record a pattern
 			ensenso_camera->recordCalibrationPattern();
 
+			int new_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
+			DR_DEBUG("Old pattern count: " << old_pattern_count);
+			DR_DEBUG("New pattern count: " << new_pattern_count);
+
+			if (new_pattern_count != old_pattern_count + 1) {
+				DR_ERROR("Failed to detect pattern in both lenses.");
+				return false;
+			}
+
 			// add robot pose to list of poses
 			auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
+			DR_DEBUG("Recorded robot poses: " << auto_calibration.robot_poses.size());
 		} catch (dr::NxError const & e) {
 			DR_ERROR("Failed to record calibration pattern. " << e.what());
 			return false;
@@ -623,6 +640,9 @@ protected:
 		auto const & camera_guess  = auto_calibration.camera_guess;
 		auto const & pattern_guess = auto_calibration.pattern_guess;
 		auto const & robot_poses   = auto_calibration.robot_poses;
+
+		DR_DEBUG("Recorded patterns: " << getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]));
+		DR_DEBUG("Recorded robot poses: " << robot_poses.size());
 
 		// check for proper initialization
 		if (moving_frame == "" || fixed_frame == "") {
@@ -703,7 +723,7 @@ protected:
 		try {
 			ensenso_camera->storeWorkspaceCalibration();
 		} catch (dr::NxError const & e) {
-			DR_ERROR("Failed to store calibration. " << e.what());
+			DR_ERROR("Failed to store calibration: " << e.what());
 			return false;
 		}
 		return true;
@@ -729,7 +749,7 @@ protected:
 
 		return true;
 	}
-	
+
 	bool onGetMonocularLink(dr_msgs::GetPose::Request &, dr_msgs::GetPose::Response & res) {
 		if (ensenso_camera->hasMonocular()) {
 			res.data = toRosPose(ensenso_camera->getMonocularLink());
@@ -738,6 +758,17 @@ protected:
 			throw std::runtime_error("No monocular camera.");
 			return false;
 		}
+	}
+
+	bool onDumpJson(dr_ensenso_msgs::DumpJson::Request & req, dr_ensenso_msgs::DumpJson::Response & res) {
+		try {
+			res.json = getNxJson(NxLibItem{req.path});
+		} catch (dr::NxError const & e) {
+			DR_ERROR("Failed to dump json: " << e.what());
+			return false;
+		}
+
+		return true;
 	}
 };
 
