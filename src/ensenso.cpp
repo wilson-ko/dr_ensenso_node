@@ -358,7 +358,7 @@ protected:
 	}
 
 	void publishImage(ros::TimerEvent const &) {
-		if (publishers.image.getNumSubscribers() == 0) return;
+		if (publishers.live.getNumSubscribers() == 0) return;
 
 		cv::Mat image = captureAndLoadImage();
 
