@@ -31,12 +31,21 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+#include <boost/filesystem.hpp>
+
 #include <systemd/sd-daemon.h>
 
 #include <memory>
 #include <optional>
 
 namespace dr {
+
+void writeToFile(std::string const & data, std::string const & filename) {
+	std::ofstream file;
+	file.exceptions(std::ios::failbit | std::ios::badbit);
+	file.open(filename);
+	file << data;
+}
 
 ImageType parseImageType(std::string const & name) {
 	if (name == "stereo_raw_left"       ) return ImageType::stereo_raw_left;
@@ -143,6 +152,9 @@ class EnsensoNode: public Node {
 
 		/// List of robot poses corresponding to the list of recorded calibration patterns.
 		std::vector<Eigen::Isometry3d> robot_poses;
+
+		/// Directory where calibration data will be dumped to.
+		std::string dump_dir;
 	} auto_calibration;
 
 	/// If true, publishes recorded data.
@@ -241,6 +253,7 @@ private:
 		auto_calibration.camera_guess  = std::nullopt;
 		auto_calibration.pattern_guess = std::nullopt;
 		auto_calibration.robot_poses.clear();
+		auto_calibration.dump_dir      = "";
 	}
 
 protected:
@@ -571,6 +584,7 @@ protected:
 		auto_calibration.camera_moving = req.camera_moving;
 		auto_calibration.moving_frame  = req.moving_frame;
 		auto_calibration.fixed_frame   = req.fixed_frame;
+		auto_calibration.dump_dir      = (boost::filesystem::path(req.dump_dir) / dr::getTimeString()).native();
 
 		// check for valid camera guess
 		if (req.camera_guess.position.x == 0 && req.camera_guess.position.y == 0 && req.camera_guess.position.z == 0 &&
@@ -594,6 +608,16 @@ protected:
 			return false;
 		}
 
+		// create dump directory for debugging purposes
+		if (!auto_calibration.dump_dir.empty()) {
+			namespace fs = boost::filesystem;
+			boost::system::error_code error;
+			fs::create_directories(auto_calibration.dump_dir, error);
+			if (error) DR_ERROR("Failed to create calibration dump directory: " << auto_calibration.dump_dir);
+			else writeNxJsonToFile(NxLibItem{}, (fs::path(auto_calibration.dump_dir) / "ensenso_root.json").native());
+			DR_DEBUG("Dumping calibration data to " << auto_calibration.dump_dir);
+		}
+
 		DR_INFO("Successfully initialized calibration sequence.");
 
 		return true;
@@ -607,10 +631,33 @@ protected:
 		}
 
 		int old_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
+		std::string calibration_command;
+
+		auto save_record_calibration_data = [this, old_pattern_count, &calibration_command]() {
+			// create dump directory for this recording
+			namespace fs = boost::filesystem;
+			fs::path recording_dir = fs::path(auto_calibration.dump_dir) / std::to_string(old_pattern_count);
+			boost::system::error_code error;
+			fs::create_directories(recording_dir, error);
+			if (error) DR_ERROR("Failed to create calibration dump directory: " << auto_calibration.dump_dir);
+			else {
+				DR_DEBUG("Writing calibration results to " << recording_dir.native());
+				writeToFile(calibration_command, (recording_dir / "command.json").native());
+				writeNxJsonToFile(NxLibItem{}, (recording_dir / "ensenso_root.json").native());
+				try {
+					cv::Mat left = ensenso_camera->loadImage(ImageType::stereo_raw_left);
+					cv::Mat right = ensenso_camera->loadImage(ImageType::stereo_raw_right);
+					cv::imwrite((recording_dir / "stereo_raw_left.png").native(), left);
+					cv::imwrite((recording_dir / "stereo_raw_right.png").native(), right);
+				} catch (dr::NxError const & e) {
+					DR_ERROR("Failed to retrieve images for dumping calibration data. " << e.what());
+				}
+			}
+		};
 
 		try {
 			// record a pattern
-			ensenso_camera->recordCalibrationPattern();
+			ensenso_camera->recordCalibrationPattern(&calibration_command);
 
 			int new_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
 			DR_DEBUG("Old pattern count: " << old_pattern_count);
@@ -625,9 +672,12 @@ protected:
 			auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
 			DR_DEBUG("Recorded robot poses: " << auto_calibration.robot_poses.size());
 		} catch (dr::NxError const & e) {
+			if (!auto_calibration.dump_dir.empty()) save_record_calibration_data();
 			DR_ERROR("Failed to record calibration pattern. " << e.what());
 			return false;
 		}
+
+		if (!auto_calibration.dump_dir.empty()) save_record_calibration_data();
 
 		DR_INFO("Successfully recorded a calibration sample.");
 		return true;
@@ -650,7 +700,10 @@ protected:
 			return false;
 		}
 
+		std::string calibration_command;
+
 		try {
+
 			// perform calibration
 			dr::Ensenso::CalibrationResult calibration =
 				ensenso_camera->computeCalibration(
@@ -658,7 +711,8 @@ protected:
 					camera_moving,
 					camera_guess,
 					pattern_guess,
-					camera_moving ? moving_frame : fixed_frame
+					camera_moving ? moving_frame : fixed_frame,
+					&calibration_command
 				);
 
 			// copy result
@@ -669,10 +723,18 @@ protected:
 
 			// store result in camera
 			ensenso_camera->storeWorkspaceCalibration();
-
 		} catch (dr::NxError const & e) {
+			// store debug information
+			if (!auto_calibration.dump_dir.empty()) {
+				writeToFile(calibration_command, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_command.json").native());
+			}
 			DR_ERROR("Failed to finalize calibration. " << e.what());
 			return false;
+		}
+
+		// store debug information
+		if (!auto_calibration.dump_dir.empty()) {
+			writeToFile(calibration_command, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_command.json").native());
 		}
 
 		DR_INFO("Successfully finished calibration sequence.");

@@ -22,6 +22,7 @@ estd::result<void, estd::error> EnsensoCalibratorNode::initializeCalibration(Ini
 	request.moving_frame  = config.moving_frame;
 	request.camera_guess  = dr::toRosPose(config.camera_guess);
 	request.pattern_guess = dr::toRosPose(config.pattern_guess);
+	request.dump_dir      = config.dump_dir;
 
 	// Try to call the service.
 	try {
