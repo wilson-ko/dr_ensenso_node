@@ -572,6 +572,7 @@ protected:
 	}
 
 	bool onInitializeCalibration(dr_ensenso_msgs::InitializeCalibration::Request & req, dr_ensenso_msgs::InitializeCalibration::Response &) {
+		namespace fs = boost::filesystem;
 		try {
 			ensenso_camera->discardCalibrationPatterns();
 			ensenso_camera->clearWorkspaceCalibration();
@@ -584,7 +585,7 @@ protected:
 		auto_calibration.camera_moving = req.camera_moving;
 		auto_calibration.moving_frame  = req.moving_frame;
 		auto_calibration.fixed_frame   = req.fixed_frame;
-		auto_calibration.dump_dir      = (boost::filesystem::path(req.dump_dir) / dr::getTimeString()).native();
+		auto_calibration.dump_dir      = (fs::path(req.dump_dir) / dr::getTimeString()).native();
 
 		// check for valid camera guess
 		if (req.camera_guess.position.x == 0 && req.camera_guess.position.y == 0 && req.camera_guess.position.z == 0 &&
@@ -610,7 +611,6 @@ protected:
 
 		// create dump directory for debugging purposes
 		if (!auto_calibration.dump_dir.empty()) {
-			namespace fs = boost::filesystem;
 			boost::system::error_code error;
 			fs::create_directories(auto_calibration.dump_dir, error);
 			if (error) DR_ERROR("Failed to create calibration dump directory: " << auto_calibration.dump_dir);
@@ -672,7 +672,6 @@ protected:
 			auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
 			DR_DEBUG("Recorded robot poses: " << auto_calibration.robot_poses.size());
 		} catch (dr::NxError const & e) {
-			if (!auto_calibration.dump_dir.empty()) save_record_calibration_data();
 			DR_ERROR("Failed to record calibration pattern. " << e.what());
 			return false;
 		}
