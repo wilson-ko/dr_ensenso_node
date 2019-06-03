@@ -295,8 +295,6 @@ protected:
 		try {
 			// create the camera
 			ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular());
-		} catch (dr::NxError const & e) {
-			throw std::runtime_error("Failed initializing camera. " + std::string(e.what()));
 		} catch (std::runtime_error const & e) {
 			throw std::runtime_error("Failed initializing camera. " + std::string(e.what()));
 		}
@@ -563,7 +561,7 @@ protected:
 
 		try {
 			res.data = dr::toRosPose(ensenso_camera->detectCalibrationPattern(req.samples));
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to find calibration pattern. " << e.what());
 			return false;
 		}
@@ -576,7 +574,7 @@ protected:
 		try {
 			ensenso_camera->discardCalibrationPatterns();
 			ensenso_camera->clearWorkspaceCalibration();
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to discard patterns. " << e.what());
 			return false;
 		}
@@ -649,7 +647,7 @@ protected:
 					cv::Mat right = ensenso_camera->loadImage(ImageType::stereo_raw_right);
 					cv::imwrite((recording_dir / "stereo_raw_left.png").native(), left);
 					cv::imwrite((recording_dir / "stereo_raw_right.png").native(), right);
-				} catch (dr::NxError const & e) {
+				} catch (std::runtime_error const & e) {
 					DR_ERROR("Failed to retrieve images for dumping calibration data. " << e.what());
 				}
 			}
@@ -671,7 +669,7 @@ protected:
 			// add robot pose to list of poses
 			auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
 			DR_DEBUG("Recorded robot poses: " << auto_calibration.robot_poses.size());
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to record calibration pattern. " << e.what());
 			return false;
 		}
@@ -722,7 +720,7 @@ protected:
 
 			// store result in camera
 			ensenso_camera->storeWorkspaceCalibration();
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			// store debug information
 			if (!auto_calibration.dump_dir.empty()) {
 				writeToFile(calibration_command, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_command.json").native());
@@ -743,7 +741,7 @@ protected:
 	bool onSetWorkspaceCalibration(dr_msgs::SendPoseStamped::Request & req, dr_msgs::SendPoseStamped::Response &) {
 		try {
 			ensenso_camera->setWorkspaceCalibration(dr::toEigen(req.data.pose), req.data.header.frame_id, Eigen::Isometry3d::Identity());
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to set workspace calibration: " << e.what());
 			return false;
 		}
@@ -753,7 +751,7 @@ protected:
 	bool onClearWorkspaceCalibration(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
 		try {
 			ensenso_camera->clearWorkspaceCalibration();
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to clear workspace calibration: " << e.what());
 			return false;
 		}
@@ -773,7 +771,7 @@ protected:
 			DR_INFO("Found calibration pattern at:\n" << dr::toYaml(pattern_pose));
 			DR_INFO("Defined pattern pose:\n" << dr::toYaml(dr::toEigen(req.pattern)));
 			ensenso_camera->setWorkspaceCalibration(pattern_pose, req.frame_id, dr::toEigen(req.pattern), true);
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to calibrate camera pose. " << e.what());
 			return false;
 		}
@@ -783,7 +781,7 @@ protected:
 	bool onStoreWorkspaceCalibration(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
 		try {
 			ensenso_camera->storeWorkspaceCalibration();
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to store calibration: " << e.what());
 			return false;
 		}
@@ -824,7 +822,7 @@ protected:
 	bool onDumpJson(dr_ensenso_msgs::DumpJson::Request & req, dr_ensenso_msgs::DumpJson::Response & res) {
 		try {
 			res.json = getNxJson(NxLibItem{req.path});
-		} catch (dr::NxError const & e) {
+		} catch (std::runtime_error const & e) {
 			DR_ERROR("Failed to dump json: " << e.what());
 			return false;
 		}
