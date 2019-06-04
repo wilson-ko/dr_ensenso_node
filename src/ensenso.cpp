@@ -292,12 +292,9 @@ protected:
 		}
 
 		::sd_notify(false, "STATUS=opening Ensenso");
-		try {
-			// create the camera
-			ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular());
-		} catch (std::runtime_error const & e) {
-			throw std::runtime_error("Failed initializing camera. " + std::string(e.what()));
-		}
+
+		// create the camera
+		ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular());
 
 		// activate service servers
 		servers.camera_data                 = advertiseService("get_data"                   , &EnsensoNode::onGetData                  , this);
@@ -555,29 +552,18 @@ protected:
 
 	bool onDetectCalibrationPattern(dr_ensenso_msgs::DetectCalibrationPattern::Request & req, dr_ensenso_msgs::DetectCalibrationPattern::Response & res) {
 		if (req.samples == 0) {
-			DR_ERROR("Unable to get pattern pose. Number of samples is set to 0.");
-			return false;
+			throw std::runtime_error("Unable to get pattern pose. Number of samples is set to 0.");
 		}
 
-		try {
-			res.data = dr::toRosPose(ensenso_camera->detectCalibrationPattern(req.samples));
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to find calibration pattern. " << e.what());
-			return false;
-		}
+		res.data = dr::toRosPose(ensenso_camera->detectCalibrationPattern(req.samples));
 
 		return true;
 	}
 
 	bool onInitializeCalibration(dr_ensenso_msgs::InitializeCalibration::Request & req, dr_ensenso_msgs::InitializeCalibration::Response &) {
 		namespace fs = boost::filesystem;
-		try {
-			ensenso_camera->discardCalibrationPatterns();
-			ensenso_camera->clearWorkspaceCalibration();
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to discard patterns. " << e.what());
-			return false;
-		}
+		ensenso_camera->discardCalibrationPatterns();
+		ensenso_camera->clearWorkspaceCalibration();
 		resetCalibration();
 
 		auto_calibration.camera_moving = req.camera_moving;
@@ -603,8 +589,7 @@ protected:
 
 		// check for proper initialization
 		if (auto_calibration.moving_frame == "" || auto_calibration.fixed_frame == "") {
-			DR_ERROR("No calibration frame provided.");
-			return false;
+			throw std::runtime_error("No calibration frame provided.");
 		}
 
 		// create dump directory for debugging purposes
@@ -624,8 +609,7 @@ protected:
 	bool onRecordCalibration(dr_msgs::SendPose::Request & req, dr_msgs::SendPose::Response &) {
 		// check for proper initialization
 		if (auto_calibration.moving_frame == "" || auto_calibration.fixed_frame == "") {
-			DR_ERROR("No calibration frame provided.");
-			return false;
+			throw std::runtime_error("No calibration frame provided.");
 		}
 
 		int old_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
@@ -653,26 +637,20 @@ protected:
 			}
 		};
 
-		try {
-			// record a pattern
-			ensenso_camera->recordCalibrationPattern(&calibration_command);
+		// record a pattern
+		ensenso_camera->recordCalibrationPattern(&calibration_command);
 
-			int new_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
-			DR_DEBUG("Old pattern count: " << old_pattern_count);
-			DR_DEBUG("New pattern count: " << new_pattern_count);
+		int new_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
+		DR_DEBUG("Old pattern count: " << old_pattern_count);
+		DR_DEBUG("New pattern count: " << new_pattern_count);
 
-			if (new_pattern_count != old_pattern_count + 1) {
-				DR_ERROR("Failed to detect pattern in both lenses.");
-				return false;
-			}
-
-			// add robot pose to list of poses
-			auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
-			DR_DEBUG("Recorded robot poses: " << auto_calibration.robot_poses.size());
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to record calibration pattern. " << e.what());
-			return false;
+		if (new_pattern_count != old_pattern_count + 1) {
+			throw std::runtime_error("Failed to detect pattern in both lenses.");
 		}
+
+		// add robot pose to list of poses
+		auto_calibration.robot_poses.push_back(dr::toEigen(req.data));
+		DR_DEBUG("Recorded robot poses: " << auto_calibration.robot_poses.size());
 
 		if (!auto_calibration.dump_dir.empty()) save_record_calibration_data();
 
@@ -693,14 +671,12 @@ protected:
 
 		// check for proper initialization
 		if (moving_frame == "" || fixed_frame == "") {
-			DR_ERROR("No calibration frame provided.");
-			return false;
+			throw std::runtime_error("No calibration frame provided.");
 		}
 
 		std::string calibration_command;
 
 		try {
-
 			// perform calibration
 			dr::Ensenso::CalibrationResult calibration =
 				ensenso_camera->computeCalibration(
@@ -725,8 +701,7 @@ protected:
 			if (!auto_calibration.dump_dir.empty()) {
 				writeToFile(calibration_command, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_command.json").native());
 			}
-			DR_ERROR("Failed to finalize calibration. " << e.what());
-			return false;
+			throw;
 		}
 
 		// store debug information
@@ -739,22 +714,12 @@ protected:
 	}
 
 	bool onSetWorkspaceCalibration(dr_msgs::SendPoseStamped::Request & req, dr_msgs::SendPoseStamped::Response &) {
-		try {
-			ensenso_camera->setWorkspaceCalibration(dr::toEigen(req.data.pose), req.data.header.frame_id, Eigen::Isometry3d::Identity());
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to set workspace calibration: " << e.what());
-			return false;
-		}
+		ensenso_camera->setWorkspaceCalibration(dr::toEigen(req.data.pose), req.data.header.frame_id, Eigen::Isometry3d::Identity());
 		return true;
 	}
 
 	bool onClearWorkspaceCalibration(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
-		try {
 			ensenso_camera->clearWorkspaceCalibration();
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to clear workspace calibration: " << e.what());
-			return false;
-		}
 		return true;
 	}
 
@@ -766,25 +731,15 @@ protected:
 			return false;
 		}
 
-		try {
-			Eigen::Isometry3d pattern_pose = ensenso_camera->detectCalibrationPattern(req.samples);
-			DR_INFO("Found calibration pattern at:\n" << dr::toYaml(pattern_pose));
-			DR_INFO("Defined pattern pose:\n" << dr::toYaml(dr::toEigen(req.pattern)));
-			ensenso_camera->setWorkspaceCalibration(pattern_pose, req.frame_id, dr::toEigen(req.pattern), true);
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to calibrate camera pose. " << e.what());
-			return false;
-		}
+		Eigen::Isometry3d pattern_pose = ensenso_camera->detectCalibrationPattern(req.samples);
+		DR_INFO("Found calibration pattern at:\n" << dr::toYaml(pattern_pose));
+		DR_INFO("Defined pattern pose:\n" << dr::toYaml(dr::toEigen(req.pattern)));
+		ensenso_camera->setWorkspaceCalibration(pattern_pose, req.frame_id, dr::toEigen(req.pattern), true);
 		return true;
 	}
 
 	bool onStoreWorkspaceCalibration(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
-		try {
-			ensenso_camera->storeWorkspaceCalibration();
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to store calibration: " << e.what());
-			return false;
-		}
+		ensenso_camera->storeWorkspaceCalibration();
 		return true;
 	}
 
@@ -802,10 +757,9 @@ protected:
 
 	bool onGetWorkspaceCalibration(dr_msgs::GetPose::Request &, dr_msgs::GetPose::Response & res) {
 		std::optional<Eigen::Isometry3d> workspace_calibration = ensenso_camera->getWorkspaceCalibration();
-		if (!workspace_calibration) return false;
+		if (!workspace_calibration) throw std::runtime_error("Failed to get workspace calibration.");
 
 		res.data = toRosPose(*workspace_calibration);
-
 		return true;
 	}
 
@@ -815,18 +769,11 @@ protected:
 			return true;
 		} else {
 			throw std::runtime_error("No monocular camera.");
-			return false;
 		}
 	}
 
 	bool onDumpJson(dr_ensenso_msgs::DumpJson::Request & req, dr_ensenso_msgs::DumpJson::Response & res) {
-		try {
-			res.json = getNxJson(NxLibItem{req.path});
-		} catch (std::runtime_error const & e) {
-			DR_ERROR("Failed to dump json: " << e.what());
-			return false;
-		}
-
+		res.json = getNxJson(NxLibItem{req.path});
 		return true;
 	}
 };
