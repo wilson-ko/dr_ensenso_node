@@ -30,11 +30,11 @@ public:
 
 		/// Initial guess of the pose of the camera, can be used to speed up the calibration optimization.
 		/// Depending on the value of camera_moving, this pose is defined in either moving_frame or fixed_frame.
-		Eigen::Isometry3d camera_guess;
+		std::optional<Eigen::Isometry3d> camera_guess;
 
 		/// Initial guess of the pattern, can be used to speed up the calibration optimization.
 		/// Depending on the value of camera_moving, this pose is defined in either moving_frame or fixed_frame.
-		Eigen::Isometry3d pattern_guess;
+		std::optional<Eigen::Isometry3d> pattern_guess;
 
 		/// Directory in which calibration information will be stored (leave empty to disable).
 		std::string dump_dir;

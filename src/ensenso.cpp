@@ -613,9 +613,10 @@ protected:
 		}
 
 		int old_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
-		std::string calibration_command;
+		std::string parameters;
+		std::string result;
 
-		auto save_record_calibration_data = [this, old_pattern_count, &calibration_command]() {
+		auto save_record_calibration_data = [this, old_pattern_count, &parameters, &result]() {
 			// create dump directory for this recording
 			namespace fs = boost::filesystem;
 			fs::path recording_dir = fs::path(auto_calibration.dump_dir) / std::to_string(old_pattern_count);
@@ -624,7 +625,8 @@ protected:
 			if (error) DR_ERROR("Failed to create calibration dump directory: " << auto_calibration.dump_dir);
 			else {
 				DR_DEBUG("Writing calibration results to " << recording_dir.native());
-				writeToFile(calibration_command, (recording_dir / "command.json").native());
+				writeToFile(parameters, (recording_dir / "parameters.json").native());
+				writeToFile(result, (recording_dir / "result.json").native());
 				writeNxJsonToFile(NxLibItem{}, (recording_dir / "ensenso_root.json").native());
 				try {
 					cv::Mat left = ensenso_camera->loadImage(ImageType::stereo_raw_left);
@@ -638,7 +640,7 @@ protected:
 		};
 
 		// record a pattern
-		ensenso_camera->recordCalibrationPattern(&calibration_command);
+		ensenso_camera->recordCalibrationPattern(&parameters, &result);
 
 		int new_pattern_count = getNx<int>(NxLibItem()[itmPatternBuffer][itmAll][itmStereoPatternCount]);
 		DR_DEBUG("Old pattern count: " << old_pattern_count);
@@ -674,7 +676,8 @@ protected:
 			throw std::runtime_error("No calibration frame provided.");
 		}
 
-		std::string calibration_command;
+		std::string parameters;
+		std::string result;
 
 		try {
 			// perform calibration
@@ -685,7 +688,8 @@ protected:
 					camera_guess,
 					pattern_guess,
 					camera_moving ? moving_frame : fixed_frame,
-					&calibration_command
+					&parameters,
+					&result
 				);
 
 			// copy result
@@ -699,14 +703,16 @@ protected:
 		} catch (std::runtime_error const & e) {
 			// store debug information
 			if (!auto_calibration.dump_dir.empty()) {
-				writeToFile(calibration_command, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_command.json").native());
+				writeToFile(parameters, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_calibrate_parameters.json").native());
+				writeToFile(result, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_calibrate_result.json").native());
 			}
 			throw;
 		}
 
 		// store debug information
 		if (!auto_calibration.dump_dir.empty()) {
-			writeToFile(calibration_command, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_command.json").native());
+			writeToFile(parameters, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_calibrate_parameters.json").native());
+			writeToFile(result, (boost::filesystem::path(auto_calibration.dump_dir) / "compute_calibrate_result.json").native());
 		}
 
 		DR_INFO("Successfully finished calibration sequence.");
