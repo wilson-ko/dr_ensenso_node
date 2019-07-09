@@ -14,7 +14,6 @@ find_package(catkin REQUIRED COMPONENTS
 	dr_ensenso
 	dr_ensenso_msgs
 	dr_msgs
-	dr_opencv
 	dr_pcl
 	dr_ros
 	dr_thread
