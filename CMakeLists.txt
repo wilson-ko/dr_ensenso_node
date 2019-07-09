@@ -16,7 +16,6 @@ find_package(catkin REQUIRED COMPONENTS
 	dr_msgs
 	dr_pcl
 	dr_ros
-	dr_thread
 	dr_util
 	estd
 	image_transport
