@@ -6,7 +6,6 @@
 #include <dr_ensenso_msgs/DetectCalibrationPattern.h>
 #include <dr_msgs/SendPose.h>
 #include <dr_msgs/SendPoseStamped.h>
-#include <dr_opencv/ros.hpp>
 
 #include <dr_param/param.hpp>
 #include <dr_ros/node.hpp>
@@ -130,11 +129,20 @@ private:
 			return false;
 		}
 
-		// copy the image
+		// Prepare the header.
 		std_msgs::Header header;
 		header.frame_id = camera_frame;
 		header.stamp = ros::Time::now();
-		res.color = toRos(image, header);
+
+		// Prepare image conversion.
+		cv_bridge::CvImage cv_image(
+			header,
+			"bgr8", // This might be incorrect?
+			std::move(image)
+		);
+
+		// Copy the image.
+		res.color = *cv_image.toImageMsg();
 
 		// copy the point cloud
 		pcl::toROSMsg(point_cloud, res.point_cloud);

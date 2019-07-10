@@ -14,10 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
 	dr_ensenso
 	dr_ensenso_msgs
 	dr_msgs
-	dr_opencv
-	dr_pcl
 	dr_ros
-	dr_thread
 	dr_util
 	estd
 	image_transport
@@ -38,7 +35,7 @@ catkin_package(
 include_directories(SYSTEM ${catkin_INCLUDE_DIRS})
 include_directories(include/${PROJECT_NAME})
 
-add_executable(ensenso            src/ensenso.cpp)
+add_executable(ensenso            src/ensenso.cpp src/pcl/write.cpp)
 add_executable(fake_ensenso       src/fake_ensenso.cpp)
 add_executable(calibrate          src/calibrate.cpp)
 add_library   (ensenso_calibrator src/ensenso_calibrator.cpp)

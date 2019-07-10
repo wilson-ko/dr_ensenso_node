@@ -11,15 +11,13 @@
 	<license>Apache v2.0</license>
 
 	<buildtool_depend>catkin</buildtool_depend>
+	<depend>asio</depend>
 	<depend>cv_bridge</depend>
 	<depend>dr_eigen</depend>
 	<depend>dr_ensenso</depend>
 	<depend>dr_ensenso_msgs</depend>
 	<depend>dr_msgs</depend>
-	<depend>dr_opencv</depend>
-	<depend>dr_pcl</depend>
 	<depend>dr_ros</depend>
-	<depend>dr_thread</depend>
 	<depend>dr_util</depend>
 	<depend>estd</depend>
 	<depend>image_transport</depend>

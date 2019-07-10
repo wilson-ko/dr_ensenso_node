@@ -1,10 +1,10 @@
+#include "pcl/write.hpp"
+
 #include <dr_eigen/ros.hpp>
 #include <dr_eigen/yaml.hpp>
 #include <dr_ensenso/ensenso.hpp>
 #include <dr_ensenso/util.hpp>
-#include <dr_pcl/write.hpp>
 #include <dr_ros/node.hpp>
-#include <dr_thread/thread_pool.hpp>
 #include <dr_util/timestamp.hpp>
 
 #include <dr_ensenso_msgs/Calibrate.h>
@@ -31,12 +31,16 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+#include <asio/executor.hpp>
+#include <asio/post.hpp>
+#include <asio/thread_pool.hpp>
 #include <boost/filesystem.hpp>
 
 #include <systemd/sd-daemon.h>
 
 #include <memory>
 #include <optional>
+#include <thread>
 
 namespace dr {
 
@@ -166,8 +170,8 @@ class EnsensoNode: public Node {
 	/// Location where the images and point clouds are stored.
 	std::string camera_data_path;
 
-	/// Thread pool for parallel work.
-	dr::ThreadPool thread_pool;
+	/// IO context for background work.
+	asio::executor bg_work_;
 
 	/// Flag to remember to exit cleanly or not.
 	bool clean_exit_ = true;
@@ -237,7 +241,7 @@ class EnsensoNode: public Node {
 	ros::Timer publish_images_timer;
 
 public:
-	EnsensoNode() : thread_pool(1), image_transport(*this) {
+	EnsensoNode(asio::executor bg_work) : bg_work_{std::move(bg_work)}, image_transport{*this} {
 		configure();
 	}
 
@@ -491,31 +495,28 @@ protected:
 
 	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
 		try {
-			Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
+			std::shared_ptr<Data> data = std::make_shared<Data>(separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData());
 
-			pcl::toROSMsg(data.cloud, res.point_cloud);
+			pcl::toROSMsg(data->cloud, res.point_cloud);
 
 			// Get the image.
 			cv_bridge::CvImage cv_image(
 				res.point_cloud.header,
 				encoding(image_source),
-				data.image
+				data->image
 			);
 			res.color = *cv_image.toImageMsg();
 
 			// Store image and point cloud.
 			if (save_data) {
-				thread_pool.enqueue(
-					&EnsensoNode::saveData,
-					this,
-					data.cloud,
-					data.image
-				);
+				asio::post(bg_work_, [this, data] {
+					saveData(data->cloud, data->image);
+				});
 			}
 
 			// publish point cloud if requested
 			if (publish_data) {
-				publishers.cloud.publish(data.cloud);
+				publishers.cloud.publish(data->cloud);
 				publishers.image.publish(res.color);
 			}
 
@@ -538,15 +539,11 @@ protected:
 	}
 
 	bool onSaveData(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
-		Data data = separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData();
+		std::shared_ptr<Data> data = std::make_shared<Data>(separate_trigger ? captureAndLoadDataSeparately() : captureAndLoadData());
 
-		// store point cloud and image in a separate thread
-		thread_pool.enqueue(
-			&EnsensoNode::saveData,
-			this,
-			data.cloud,
-			data.image
-		);
+		asio::post(bg_work_, [this, data] {
+			saveData(data->cloud, data->image);
+		});
 		return true;
 	}
 
@@ -787,10 +784,14 @@ protected:
 }
 
 int main(int argc, char ** argv) {
+	asio::thread_pool bg_work(1);
+
 	ros::init(argc, argv, "ensenso");
-	dr::EnsensoNode node;
+	dr::EnsensoNode node(bg_work.get_executor());
 	ros::spin();
 	DR_INFO("Closing camera. This may take a (long) while.");
+
+	bg_work.join();
 
 	return node.cleanExit() ? 0 : 1;
 }
