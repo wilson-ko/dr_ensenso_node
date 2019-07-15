@@ -657,7 +657,7 @@ protected:
 		return true;
 	}
 
-	bool onFinalizeCalibration(dr_ensenso_msgs::FinalizeCalibration::Request &, dr_ensenso_msgs::FinalizeCalibration::Response & res) {
+	bool onFinalizeCalibration(dr_ensenso_msgs::FinalizeCalibration::Request & req, dr_ensenso_msgs::FinalizeCalibration::Response & res) {
 		auto const & camera_moving = auto_calibration.camera_moving;
 		auto const & moving_frame  = auto_calibration.moving_frame;
 		auto const & fixed_frame   = auto_calibration.fixed_frame;
@@ -695,8 +695,10 @@ protected:
 			res.iterations     = std::get<2>(calibration);
 			res.residual_error = std::get<3>(calibration);
 
-			// store result in camera
-			ensenso_camera->storeWorkspaceCalibration();
+			if (req.store_calibration) {
+				// store result in camera
+				ensenso_camera->storeWorkspaceCalibration();
+			}
 		} catch (std::runtime_error const & e) {
 			// store debug information
 			if (!auto_calibration.dump_dir.empty()) {

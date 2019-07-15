@@ -64,12 +64,15 @@ private:
 		dr::ServiceClient<dr_ensenso_msgs::FinalizeCalibration> finalize_calibration;
 	} services_;
 
+	bool store_calibration_ = true;
+
 public:
 	EnsensoCalibratorNode(
 		std::string const & initialize_calibration_service, ///< Service name for the initialization of the calibration.
 		std::string const & record_calibration_service,     ///< Service name for the detect calibration pattern service.
 		std::string const & finalize_calibration_service,   ///< Service name for finalizing the calibration.
-		bool wait_for_services = false                      ///< If true, waits for the services to come alive.
+		bool wait_for_services = false,                     ///< If true, waits for the services to come alive.
+		bool store_calibration = true                       ///< If true, stores the calibration in the Ensenso.
 	);
 
 	/// Initializes a calibration sequence, clearing any state from previous calibration sequences.
