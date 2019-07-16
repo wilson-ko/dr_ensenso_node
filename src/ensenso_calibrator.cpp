@@ -6,8 +6,9 @@ EnsensoCalibratorNode::EnsensoCalibratorNode(
 	std::string const & initialize_calibration_service,
 	std::string const & record_calibration_service,
 	std::string const & finalize_calibration_service,
-	bool wait_for_services
-) {
+	bool wait_for_services,
+	bool store_calibration
+) : store_calibration_{store_calibration} {
 	// Connect the services to dr_ensenso_node.
 	services_.initialize_calibration.connect(*this, initialize_calibration_service, wait_for_services);
 	services_.record_calibration    .connect(*this, record_calibration_service, wait_for_services);
@@ -53,6 +54,7 @@ estd::result<void, estd::error> EnsensoCalibratorNode::recordCalibration(Eigen::
 estd::result<EnsensoCalibratorNode::CalibrationResult, estd::error> EnsensoCalibratorNode::finalizeCalibration() {
 	// Construct the request.
 	dr_ensenso_msgs::FinalizeCalibrationRequest request;
+	request.store_calibration = store_calibration_;
 
 	// Try to call the service.
 	try {
