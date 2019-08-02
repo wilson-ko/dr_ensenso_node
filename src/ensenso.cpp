@@ -286,6 +286,12 @@ protected:
 		publish_data        = getParam<bool>("publish_data",    true);
 		save_data           = getParam<bool>("save_data",       true);
 		timeout             = getParam<int>("timeout",          1500);
+		bool verbose        = getParam<bool>("verbose",         false);
+
+		if (verbose) {
+			DR_INFO("Initializing nxLib...");
+		}
+		NxLibInitToken init_token = initNxLib();
 
 		// get Ensenso serial
 		serial = getParam<std::string>("serial", "");
@@ -297,8 +303,15 @@ protected:
 
 		::sd_notify(false, "STATUS=opening Ensenso");
 
+		LogFunction log;
+		if (verbose) {
+			log = [] (auto message) {
+				DR_INFO("dr_ensenso: " << message);
+			};
+		}
+
 		// create the camera
-		ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular());
+		ensenso_camera = std::make_unique<dr::Ensenso>(serial, needMonocular(), log, init_token);
 
 		// activate service servers
 		servers.camera_data                 = advertiseService("get_data"                   , &EnsensoNode::onGetData                  , this);
