@@ -26,62 +26,62 @@ namespace dr {
 class FakeEnsensoNode : public Node {
 private:
 	/// Service server for supplying point clouds and images.
-	ros::ServiceServer get_data_server;
+	ros::ServiceServer get_data_server; //NOLINT
 
 	/// Buffered image.
-	cv::Mat image;
+	cv::Mat image; //NOLINT
 
 	/// Buffered point cloud.
-	pcl::PointCloud<pcl::PointXYZ> point_cloud;
+	pcl::PointCloud<pcl::PointXYZ> point_cloud; //NOLINT
 
 	/// Name for the camera frame.
-	std::string camera_frame;
+	std::string camera_frame; //NOLINT
 
 	/// If true, publishes point cloud data when calling getData.
-	bool publish_cloud = true;
+	bool publish_cloud = true; //NOLINT
 
 	/// If true, publishes point cloud data when calling getData.
-	bool publish_image = true;
+	bool publish_image = true; //NOLINT
 
 	/// Object for transporting images.
-	image_transport::ImageTransport image_transport;
+	image_transport::ImageTransport image_transport; //NOLINT
 
 	struct {
 		/// Service server for supplying point clouds and images.
-		ros::ServiceServer camera_data;
+		ros::ServiceServer camera_data; //NOLINT
 
 		/// Service server for dumping image and cloud to disk.
-		ros::ServiceServer dump_data;
+		ros::ServiceServer dump_data; //NOLINT
 
 		/// Service server for retrieving the pose of the pattern.
-		ros::ServiceServer detect_calibration_pattern;
+		ros::ServiceServer detect_calibration_pattern; //NOLINT
 
 		/// Service server for initializing the calibration sequence.
-		ros::ServiceServer initialize_calibration;
+		ros::ServiceServer initialize_calibration; //NOLINT
 
 		/// Service server for recording one calibration sample.
-		ros::ServiceServer record_calibration;
+		ros::ServiceServer record_calibration; //NOLINT
 
 		/// Service server for finalizing the calibration.
-		ros::ServiceServer finalize_calibration;
+		ros::ServiceServer finalize_calibration; //NOLINT
 
 		/// Service server for setting the camera pose setting of the Ensenso.
-		ros::ServiceServer set_workspace_calibration;
+		ros::ServiceServer set_workspace_calibration; //NOLINT
 
 		/// Service server for clearing the camera pose setting of the Ensenso.
-		ros::ServiceServer clear_workspace_calibration;
+		ros::ServiceServer clear_workspace_calibration; //NOLINT
 
 		/// Service server combining 'get_pattern_pose', 'set_workspace', and stores it to the ensenso.
-		ros::ServiceServer calibrate_workspace;
+		ros::ServiceServer calibrate_workspace; //NOLINT
 
 		/// Service server for storing the calibration.
-		ros::ServiceServer store_workspace_calibration;
-	} servers;
+		ros::ServiceServer store_workspace_calibration; //NOLINT
+	} servers; //NOLINT
 
 	struct {
-		ros::Publisher cloud;
-		image_transport::Publisher image;
-	} publishers;
+		ros::Publisher cloud; //NOLINT
+		image_transport::Publisher image; //NOLINT
+	} publishers; //NOLINT
 
 public:
 	FakeEnsensoNode() : image_transport(*this) {
@@ -106,15 +106,15 @@ public:
 	}
 
 private:
-	bool onGetData(dr_ensenso_msgs::GetCameraData::Request &, dr_ensenso_msgs::GetCameraData::Response & res) {
+	bool onGetData(dr_ensenso_msgs::GetCameraData::Request & /*unused_req*/, dr_ensenso_msgs::GetCameraData::Response & res) {
 		DR_INFO("Received data request.");
 
 		// read image file path
 		std::string image_file = getParam<std::string>("image_path");
 		std::string point_cloud_file = getParam<std::string>("point_cloud_path");
 
-		if (!boost::filesystem::exists(image_file))       DR_ERROR("Failed to load image: File does not exist: " << image_file);
-		if (!boost::filesystem::exists(point_cloud_file)) DR_ERROR("Failed to load point cloud: File does not exist: " << point_cloud_file);
+		if (!boost::filesystem::exists(image_file))       { DR_ERROR("Failed to load image: File does not exist: " << image_file); }
+		if (!boost::filesystem::exists(point_cloud_file)) { DR_ERROR("Failed to load point cloud: File does not exist: " << point_cloud_file); }
 
 		// load image
 		image = cv::imread(image_file, cv::IMREAD_UNCHANGED);
@@ -138,7 +138,8 @@ private:
 		cv_bridge::CvImage cv_image(
 			header,
 			"bgr8", // This might be incorrect?
-			std::move(image)
+			//std::move(image) No move will actually happen since image is const ref.
+			image
 		);
 
 		// Copy the image.
@@ -163,54 +164,54 @@ private:
 		return true;
 	}
 
-	bool onDumpData(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
+	bool onDumpData(std_srvs::Empty::Request & /*unused_req*/, std_srvs::Empty::Response & /*unused_res*/) {
 		DR_ERROR("The dump_data service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onDetectCalibrationPattern(dr_ensenso_msgs::DetectCalibrationPattern::Request &, dr_ensenso_msgs::DetectCalibrationPattern::Response &) {
+	bool onDetectCalibrationPattern(dr_ensenso_msgs::DetectCalibrationPattern::Request & /*unused_req*/, dr_ensenso_msgs::DetectCalibrationPattern::Response & /*unused res*/) {
 		DR_ERROR("The get_pattern_pose service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onInitializeCalibration(dr_ensenso_msgs::InitializeCalibration::Request &, dr_ensenso_msgs::InitializeCalibration::Response &) {
+	bool onInitializeCalibration(dr_ensenso_msgs::InitializeCalibration::Request & /*unused_req*/, dr_ensenso_msgs::InitializeCalibration::Response & /*unused_res*/) {
 		DR_ERROR("The initialize_calibration service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onRecordCalibration(dr_msgs::SendPose::Request &, dr_msgs::SendPose::Response &) {
+	bool onRecordCalibration(dr_msgs::SendPose::Request & /*unused_req*/, dr_msgs::SendPose::Response & /*unused_res*/) {
 		DR_ERROR("The record_calibration service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onFinalizeCalibration(dr_ensenso_msgs::FinalizeCalibration::Request &, dr_ensenso_msgs::FinalizeCalibration::Response &) {
+	bool onFinalizeCalibration(dr_ensenso_msgs::FinalizeCalibration::Request & /*unused_req*/, dr_ensenso_msgs::FinalizeCalibration::Response & /*unused_res*/) {
 		DR_ERROR("The finalize_calibration service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onSetWorkspaceCalibration(dr_msgs::SendPoseStamped::Request &, dr_msgs::SendPoseStamped::Response &) {
+	bool onSetWorkspaceCalibration(dr_msgs::SendPoseStamped::Request & /*unused_req*/, dr_msgs::SendPoseStamped::Response & /*unused_res*/) {
 		DR_ERROR("The set_workspace service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onClearWorkspaceCalibration(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
+	bool onClearWorkspaceCalibration(std_srvs::Empty::Request & /*unused_req*/, std_srvs::Empty::Response & /*unuses_res*/) {
 		DR_ERROR("The clear_workspace service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onCalibrateWorkspace(dr_ensenso_msgs::Calibrate::Request &, dr_ensenso_msgs::Calibrate::Response &) {
+	bool onCalibrateWorkspace(dr_ensenso_msgs::Calibrate::Request & /*unused_req*/, dr_ensenso_msgs::Calibrate::Response & /*unused_res*/) {
 		DR_ERROR("The calibrate service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
-	bool onStoreWorkspaceCalibration(std_srvs::Empty::Request &, std_srvs::Empty::Response &) {
+	bool onStoreWorkspaceCalibration(std_srvs::Empty::Request & /*unused_req*/, std_srvs::Empty::Response & /*unused_res*/) {
 		DR_ERROR("The store_calibration service is not implemented in the fake ensenso node.");
 		return false;
 	}
 
 };
 
-}
+} //namespace dr
 
 int main(int argc, char ** argv) {
 	ros::init(argc, argv, "ensenso");

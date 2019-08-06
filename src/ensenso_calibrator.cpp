@@ -10,21 +10,23 @@ EnsensoCalibratorNode::EnsensoCalibratorNode(
 	bool store_calibration
 ) : store_calibration_{store_calibration} {
 	// Connect the services to dr_ensenso_node.
-	services_.initialize_calibration.connect(*this, initialize_calibration_service, wait_for_services);
-	services_.record_calibration    .connect(*this, record_calibration_service, wait_for_services);
-	services_.finalize_calibration  .connect(*this, finalize_calibration_service, wait_for_services);
+	// TODO(wko): Ignoring clang-tidy now, but this seems pretty serious.
+	services_.initialize_calibration.connect(*this, initialize_calibration_service, wait_for_services); //NOLINT
+	services_.record_calibration    .connect(*this, record_calibration_service, wait_for_services);     //NOLINT
+	services_.finalize_calibration  .connect(*this, finalize_calibration_service, wait_for_services);   //NOLINT
 }
 
 estd::result<void, estd::error> EnsensoCalibratorNode::initializeCalibration(InitializeCalibrationConfig const & config) {
 	// Copy the configuration to the request.
 	dr_ensenso_msgs::InitializeCalibrationRequest request;
-	request.camera_moving = config.camera_moving;
+	// ROS stores bool types from srv/msg files as uint8_t..?
+	request.camera_moving = config.camera_moving; //NOLINT
 	request.fixed_frame   = config.fixed_frame;
 	request.moving_frame  = config.moving_frame;
 	request.dump_dir      = config.dump_dir;
 
-	if (config.camera_guess)  request.camera_guess  = dr::toRosPose(*config.camera_guess);
-	if (config.pattern_guess) request.pattern_guess = dr::toRosPose(*config.pattern_guess);
+	if (config.camera_guess)  { request.camera_guess  = dr::toRosPose(*config.camera_guess); }
+	if (config.pattern_guess) { request.pattern_guess = dr::toRosPose(*config.pattern_guess); }
 
 	// Try to call the service.
 	try {
@@ -54,7 +56,7 @@ estd::result<void, estd::error> EnsensoCalibratorNode::recordCalibration(Eigen::
 estd::result<EnsensoCalibratorNode::CalibrationResult, estd::error> EnsensoCalibratorNode::finalizeCalibration() {
 	// Construct the request.
 	dr_ensenso_msgs::FinalizeCalibrationRequest request;
-	request.store_calibration = store_calibration_;
+	request.store_calibration = store_calibration_; //NOLINT
 
 	// Try to call the service.
 	try {
@@ -70,4 +72,4 @@ estd::result<EnsensoCalibratorNode::CalibrationResult, estd::error> EnsensoCalib
 	}
 }
 
-}
+} //namespace dr
