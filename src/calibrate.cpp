@@ -10,8 +10,7 @@
 #include <ros/ros.h>
 #include <tf2_ros/transform_listener.h>
 
-namespace dr {
-namespace ensenso {
+namespace dr::ensenso {
 
 geometry_msgs::Point vector3ToPoint(geometry_msgs::Vector3 const & vector) {
 	geometry_msgs::Point result;
@@ -33,7 +32,7 @@ geometry_msgs::PoseStamped lookupPose(tf2::BufferCore const & tf, std::string co
 	return transformToPose(tf.lookupTransform(parent, child, time));
 }
 
-}}
+} //namespace dr::ensenso
 
 int main(int argc, char * * argv) {
 	ros::init(argc, argv, "ensenso_calibration_tool");
@@ -47,21 +46,22 @@ int main(int argc, char * * argv) {
 
 	std::string calibration_frame = argv[1];
 	std::string tag_frame         = argv[2];
-	int samples                   = argc >= 4 ? std::stoi(argv[3]) : 10;
+	int samples                   = argc >= 4 ? std::stoi(argv[3]) : 10; //NOLINT
 	std::string service           = "/ensenso/calibrate_workspace";
 
 	tf2_ros::Buffer tf;
 	tf2_ros::TransformListener tf_listener{tf};
 
-	for (int i =0; ros::ok(); i = (i + 1) % 10) {
+	for (int i =0; ros::ok(); i = (i + 1) % 10) { //NOLINT
 		std::string tf_error;
-		if (tf.canTransform(tag_frame, calibration_frame, ros::Time(0), ros::Duration(0.1), &tf_error)) break;
-		if (i == 9) {
+		constexpr double DURATION = 0.1;
+		if (tf.canTransform(tag_frame, calibration_frame, ros::Time(0), ros::Duration(DURATION), &tf_error)) { break; }
+		if (i == 9) { //NOLINT
 			std::cerr << "TF lookup failed, retrying: " << tf_error << "\n";
 		}
 	}
 
-	if (!ros::ok()) return 1;
+	if (!ros::ok()) { return 1; }
 
 	geometry_msgs::PoseStamped pose = dr::ensenso::lookupPose(tf, calibration_frame, tag_frame, ros::Time(0));
 

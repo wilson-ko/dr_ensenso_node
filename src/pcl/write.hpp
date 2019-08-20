@@ -104,8 +104,8 @@ namespace impl {
 		MemoryMappedFileRw & operator=(MemoryMappedFileRw const &) = delete;
 
 		// Allow moving.
-		MemoryMappedFileRw(MemoryMappedFileRw && other);
-		MemoryMappedFileRw & operator=(MemoryMappedFileRw && other);
+		MemoryMappedFileRw(MemoryMappedFileRw && other) noexcept;
+		MemoryMappedFileRw & operator=(MemoryMappedFileRw && other) noexcept;
 
 		/// Create a new file of the given size and open it as memory map.
 		static estd::result<MemoryMappedFileRw, estd::error> create(std::string const & path, std::size_t size);
@@ -185,7 +185,8 @@ void writePcdBinaryCompressed(std::ostream & stream, const pcl::PointCloud<Point
 	// Couldn't compress into the desired size,
 	// so we're better off saving uncompressed.
 	if (compressed_size == 0) {
-		return writePcdBinary(stream, cloud);
+		//TODO (@wko): Ignore for now, but needs fixing.
+		return writePcdBinary(stream, cloud); //NOLINT
 	}
 
 	// Write PCD file.
@@ -213,7 +214,8 @@ estd::result<void, estd::error> writePcdBinaryCompressed(std::string const & pat
 	// Try to compress. If it doesn't fit, write the raw cloud instead.
 	std::uint32_t compressed_size = pcl::lzfCompress(data.get(), data_size, dest + header.size() + 8, data_size);
 	if (!compressed_size) {
-		return writePcdBinary(path, cloud);
+		//TODO (@wko) Need to fix.
+		return writePcdBinary(path, cloud); //NOLINT
 	}
 
 	std::memcpy(dest, header.data(), header.size());
