@@ -29,7 +29,10 @@ find_package(systemd)
 catkin_package(
 	INCLUDE_DIRS include
 	LIBRARIES ensenso_calibrator
-	CATKIN_DEPENDS dr_eigen
+	CATKIN_DEPENDS
+	dr_eigen
+	dr_ensenso
+	dr_ensenso_msgs
 )
 
 include_directories(SYSTEM ${catkin_INCLUDE_DIRS})
